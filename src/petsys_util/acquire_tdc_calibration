@@ -36,16 +36,17 @@ if not os.path.exists(args.fileNamePrefix) or not os.path.samefile(args.fileName
 
 # Prepare all channels for TDCA but disable actual triggering...
 for ac in asicsConfig.values():
+	gc = ac.globalConfig
+	gc.setValue("tp_ext_en", 0b1)
 	for cc in ac.channelConfig:
 		# Set mode to ToT
-		cc.setValue("qdc_mode", 0)
-		cc.setValue("intg_en", 0)
-		cc.setValue("intg_signal_en", 0)
+		cc.setValue("qdc_en", 0)
 
 		## Set simplest trigger_mode_2_* setting
-		cc.setValue("trigger_mode_2_t", 0b00)
-		cc.setValue("trigger_mode_2_e", 0b000)
+		cc.setValue("trigger_mode_2_t1", 0b00)
+		cc.setValue("trigger_mode_2_t2", 0b00)
 		cc.setValue("trigger_mode_2_q", 0b00)
+		cc.setValue("trigger_mode_2_v", 0b00)
 		cc.setValue("trigger_mode_2_b", 0b000)
 
 		# Disable channel from triggering.
@@ -54,7 +55,7 @@ for ac in asicsConfig.values():
 	
 
 
-simultaneousChannels = 64
+simultaneousChannels = 16
 
 # Clamp down simulatenous channels due to system limitations
 # 126/16 -- GbE interface: 126 events/frame with FEB/D, 16 ASICs per FEB/D
@@ -62,10 +63,10 @@ simultaneousChannels = 64
 simultaneousChannels = min([simultaneousChannels, 126/16, 1024/80])
 simultaneousChannels = 1
 
-channelStep = int(math.ceil(64.0/simultaneousChannels))
+channelStep = int(math.ceil(16.0/simultaneousChannels))
 
 for firstChannel in range(0, channelStep):
-	activeChannels = [ channel for channel in range(firstChannel, 64, channelStep) ]
+	activeChannels = [ channel for channel in range(firstChannel, 16, channelStep) ]
 	activeChannels_string = (", ").join([ "%d" % channel for channel in activeChannels ])
 	# Enable triggering for active channels
 	cfg = deepcopy(asicsConfig)

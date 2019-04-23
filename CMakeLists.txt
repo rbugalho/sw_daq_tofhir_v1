@@ -43,8 +43,7 @@ add_library(shm_raw_py MODULE "src/raw_data/shm_raw.cpp" "src/raw_data/shm_raw_p
 set_target_properties(shm_raw_py PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/petsys OUTPUT_NAME shm_raw PREFIX "")
 
 configure_file("src/petsys_py_lib/__init__.py" "petsys/__init__.py" COPYONLY)
-configure_file("src/petsys_py_lib/tofpet2b.py" "petsys/tofpet2b.py" COPYONLY)
-configure_file("src/petsys_py_lib/tofpet2c.py" "petsys/tofpet2c.py" COPYONLY)
+configure_file("src/petsys_py_lib/tofhir_v1.py" "petsys/tofhir_v1.py" COPYONLY)
 configure_file("src/petsys_py_lib/daqd.py" "petsys/daqd.py" COPYONLY)
 configure_file("src/petsys_py_lib/bitarray_utils.py" "petsys/bitarray_utils.py" COPYONLY)
 configure_file("src/petsys_py_lib/config.py" "petsys/config.py" COPYONLY)
@@ -53,6 +52,7 @@ configure_file("src/petsys_util/SI5326_config.txt" "SI5326_config.txt" COPYONLY)
 configure_file("src/petsys_util/acquire_tdc_calibration" "acquire_tdc_calibration" COPYONLY)
 configure_file("src/petsys_util/acquire_threshold_calibration" "acquire_threshold_calibration" COPYONLY)
 configure_file("src/petsys_util/process_threshold_calibration" "process_threshold_calibration" COPYONLY)
+configure_file("src/petsys_util/make_fake_disc_calibration_table" "make_fake_disc_calibration_table" COPYONLY)
 configure_file("src/petsys_util/acquire_qdc_calibration" "acquire_qdc_calibration" COPYONLY)
 configure_file("src/petsys_util/acquire_sipm_data" "acquire_sipm_data" COPYONLY)
 configure_file("src/petsys_util/make_bias_calibration_table" "make_bias_calibration_table" COPYONLY)
@@ -85,27 +85,27 @@ add_library ( common STATIC
 )
 add_executable("process_tdc_calibration" "src/petsys_util/process_tdc_calibration.cpp" )
 target_link_libraries("process_tdc_calibration" common)
-
-add_executable("process_qdc_calibration" "src/petsys_util/process_qdc_calibration.cpp" )
-target_link_libraries("process_qdc_calibration" common)
+ 
+# add_executable("process_qdc_calibration" "src/petsys_util/process_qdc_calibration.cpp" )
+# target_link_libraries("process_qdc_calibration" common)
 
 add_executable("convert_raw_to_raw" "src/petsys_util/convert_raw_to_raw.cpp" )
 target_link_libraries("convert_raw_to_raw" common)
 
-add_executable("convert_raw_to_group" "src/petsys_util/convert_raw_to_group.cpp" )
-target_link_libraries("convert_raw_to_group" common)
-
+# add_executable("convert_raw_to_group" "src/petsys_util/convert_raw_to_group.cpp" )
+# target_link_libraries("convert_raw_to_group" common)
+# 
 add_executable("convert_raw_to_coincidence" "src/petsys_util/convert_raw_to_coincidence.cpp" )
 target_link_libraries("convert_raw_to_coincidence" common)
 
 add_executable("convert_raw_to_singles" "src/petsys_util/convert_raw_to_singles.cpp" )
 target_link_libraries("convert_raw_to_singles" common)
-
-add_executable("print_raw" "src/petsys_util/print_raw.cpp" )
-target_link_libraries("print_raw" common)
-
-add_executable("merge_raw" "src/petsys_util/merge_raw.cpp" )
-target_link_libraries("merge_raw" common)
-
-add_executable("analyze_asic_quick_scan" "src/petsys_util/analyze_asic_quick_scan.cpp" )
-target_link_libraries("analyze_asic_quick_scan" common)
+# 
+# add_executable("print_raw" "src/petsys_util/print_raw.cpp" )
+# target_link_libraries("print_raw" common)
+# 
+# add_executable("merge_raw" "src/petsys_util/merge_raw.cpp" )
+# target_link_libraries("merge_raw" common)
+# 
+# add_executable("analyze_asic_quick_scan" "src/petsys_util/analyze_asic_quick_scan.cpp" )
+# target_link_libraries("analyze_asic_quick_scan" common)

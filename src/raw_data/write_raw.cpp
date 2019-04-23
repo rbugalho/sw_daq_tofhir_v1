@@ -19,7 +19,7 @@
 using namespace std;
 
 struct CalibrationData{
-	uint64_t eventWord;
+	unsigned __int128 eventWord;
 	int freq;
 };
 
@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
 	memcpy(header+1, &acquisitionStartTime, sizeof(double));
 	fwrite((void *)&header, sizeof(uint64_t), 8, dataFile);
 	
-	multiset<uint64_t> calEventSet;  
+	multiset<unsigned __int128> calEventSet;  
 	CalibrationData calData;
 
 	bool firstBlock = true;
@@ -157,7 +157,7 @@ int main(int argc, char *argv[])
 			// If acquiring calibration data, insert events into multiset for data compression
 			if(!acqStdMode){
 				for(int i = 0 ; i < nEvents ; i++){
-					uint64_t event = shm->getFrameWord(index, i+2);
+					unsigned __int128 event = shm->getRawDataFrame(index)->getEventWord(i).word;
 					calEventSet.insert(event);
 				}
 			}
@@ -203,7 +203,7 @@ int main(int argc, char *argv[])
 		if(blockHeader.endOfStep != 0) {
 			// If acquiring calibration data, at the end of each calibration step, write compressed data to disk 
 			if(!acqStdMode){
-				multiset<uint64_t>::iterator eventIt = calEventSet.begin();
+				multiset<unsigned __int128>::iterator eventIt = calEventSet.begin();
 		        
 				while(eventIt != calEventSet.end()){
 					calData.freq = calEventSet.count(*eventIt);

@@ -4,8 +4,7 @@
 # Handles interaction with the system via daqd
 
 import shm_raw
-import tofpet2b
-import tofpet2c
+import tofhir_v1
 import socket
 from random import randrange
 import struct
@@ -26,7 +25,7 @@ class Connection:
         ## Constructor
 	def __init__(self):
 		socketPath = "/tmp/d.sock"
-		self.__systemFrequency = 200E6
+		self.__systemFrequency = 160E6
 
 		# Open socket to daqd
 		self.__socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -143,7 +142,7 @@ class Connection:
 		return self.__activeAsics[(portID, slaveID, chipID)]
 	
 	def getActiveAsicsChannels(self):
-		return [ (p, s, a, c) for c in range(64) for (p, s, a) in self.getActiveAsics() ]
+		return [ (p, s, a, c) for c in range(16) for (p, s, a) in self.getActiveAsics() ]
 	
 	def getActiveBiasChannels(self):
 		r = []
@@ -179,7 +178,7 @@ class Connection:
 			if interval % tacRefreshPeriod == 0:
 				print "WARNING: Test pulse period %d is a multiple of TAC refresh period %d (%d %d) in some ASICs." % (interval, tacRefreshPeriod, tacRefreshPeriod_1, tacRefreshPeriod_2)
 		
-		finePhase = int(round(finePhase * 6*56))	# WARNING: This should be firmware dependent..
+		finePhase = int(round(finePhase * 7*56))	# WARNING: This should be firmware dependent..
 	
 		if interval < (length + 1):
 			raise "Interval (%d) must be greater than length (%d) + 1" % (interval, length)
@@ -272,18 +271,30 @@ class Connection:
 				raise ClockNotOK(portID, slaveID)
 
 			asicType = self.read_config_register(portID, slaveID, 16, 0x0102)
-			if asicType != 0x0002:
+			if asicType != 0x0003:
 				raise ErrorInvalidAsicType(portID, slaveID, asicType)
 			
 			
 		# Power on ASICs
 		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 2, 0x0213, 0b11) 
 		sleep(0.1) # Wait for power to stabilize
+		
+		# Enable ASIC config
+		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 1, 0x0320, 0b1) 
 
 		# Reset the ASICs configuration
+		# First, RESYNC
+		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 2, 0x0201, 0b01)
 		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 2, 0x0201, 0b00)
-		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 1, 0x300, 0b1)
-		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 1, 0x300, 0b0)
+		sleep(0.2)
+		# Then send config RESET command
+		cmd = [ 0x00, 0x00 ] + [ 0x00 for n in range(30) ] 
+		cmd = bytearray(cmd)
+		for portID, slaveID in self.getActiveFEBDs(): self.sendCommand(portID, slaveID, 0x01, cmd)
+		# RESYNC again
+		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 2, 0x0201, 0b01)
+		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 2, 0x0201, 0b00)
+		sleep(0.2)
 		self.__asicConfigCache = None
 		self.__asicConfigCache_TAC_Refresh = None
 
@@ -292,47 +303,65 @@ class Connection:
 		asicType = {}
 		initialGlobalAsicConfig = {} # Store the default config we're uploading into each FEB/D
 
+		
+		## Step 1
+		## Blindly set the ASIC's global configuration to math the FEB/D firmware build
 		for portID, slaveID in self.getActiveFEBDs():
+			tdc_clk_div, ddr, tx_nlinks = self.__getAsicLinkConfiguration(portID, slaveID)
+			for chipID in range(MAX_CHIPS):
+				try:
+					# Upload default configuration, adjusted for FEB/D firmware RX build
+					chip_module = tofhir_v1
+					gcfg = chip_module.AsicGlobalConfig()
+					gcfg.setValue("tx_ddr", ddr)
+					gcfg.setValue("tx_nlinks", tx_nlinks)
+					self.__doAsicCommand(portID, slaveID, chipID, "wrGlobalCfg", value=gcfg)
+					
+				except tofhir_v1.ConfigurationError as e:
+					pass
+
+		# RESYNC again
+		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 2, 0x0201, 0b01)
+		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 2, 0x0201, 0b00)
+		sleep(0.2)
+		
+		
+		for portID, slaveID in self.getActiveFEBDs():
+			# Enable ASIC RX logic
+			self.write_config_register(portID, slaveID, 64, 0x0318, 0xFFFFFFFFFFFFFFFF)
+			tdc_clk_div, ddr, tx_nlinks = self.__getAsicLinkConfiguration(portID, slaveID)
 			for chipID in range(MAX_CHIPS):
 				try:
 					status, readback = self.__doAsicCommand(portID, slaveID, chipID, "rdGlobalCfg")
-					if readback == tofpet2b.GlobalConfigAfterReset:
-						asicType[(portID, slaveID, chipID)] = "2B"
-						tofpet2 = tofpet2b
-					elif readback == tofpet2c.GlobalConfigAfterReset:
-						asicType[(portID, slaveID, chipID)] = "2C"
-						tofpet2 = tofpet2c
-					else: 
-						raise ErrorAsicUnknownConfigurationAfterReset(portID, slaveID, chipID, readback)
+				except tofhir_v1.ConfigurationError as e:
+					continue
+				
+				asicType[(portID, slaveID, chipID)] = "V1"
+				chip_module = tofhir_v1
+				
+				gcfg = chip_module.AsicGlobalConfig()
+				ccfg = chip_module.AsicChannelConfig()
+
+				gcfg.setValue("tx_ddr", ddr)
+				gcfg.setValue("tx_nlinks", tx_nlinks)
 					
-					gcfg = tofpet2.AsicGlobalConfig()
-					ccfg = tofpet2.AsicChannelConfig()
-						
-					# Upload default configuration, adjusted for FEB/D firmware RX build
-					tdc_clk_div, ddr, tx_nlinks = self.__getAsicLinkConfiguration(portID, slaveID)
-					gcfg.setValue("tdc_clk_div", tdc_clk_div)
-					gcfg.setValue("tx_ddr", ddr)
-					gcfg.setValue("tx_nlinks", tx_nlinks)
-					#  .. and with the TX logic to calibration
-					gcfg.setValue("tx_mode", 0b01)
-					initialGlobalAsicConfig[(portID, slaveID, chipID)] = gcfg
+				# Upload default configuration, adjusted for FEB/D firmware RX build
+				initialGlobalAsicConfig[(portID, slaveID, chipID)] = gcfg
 
-					self.__doAsicCommand(portID, slaveID, chipID, "wrGlobalCfg", value=gcfg)
-					for n in range(64):
-						self.__doAsicCommand(portID, slaveID, chipID, "wrChCfg", channel=n, value=ccfg)
+				self.__doAsicCommand(portID, slaveID, chipID, "wrGlobalCfg", value=gcfg)
+				for n in range(16):
+					self.__doAsicCommand(portID, slaveID, chipID, "wrChCfg", channel=n, value=ccfg)
 
-					gID = chipID + MAX_CHIPS * slaveID + (MAX_CHIPS * MAX_SLAVES) * portID
-					asicConfigOK[gID] = True
-				except tofpet2b.ConfigurationError as e:
-					pass
-
+				gID = chipID + MAX_CHIPS * slaveID + (MAX_CHIPS * MAX_SLAVES) * portID
+				asicConfigOK[gID] = True
+				
 		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 2, 0x0201, 0b01)
 		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 2, 0x0201, 0b00)
 		# Generate master sync (if available) and start acquisition
 		# First, cycle master sync enable on/off to calibrate sync reception
 		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 2, 0x0201, 0b10)
 		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 2, 0x0201, 0b00)
-		sleep(0.010)
+		sleep(0.210)
 		# Then enable master sync reception...
 		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 2, 0x0201, 0b10)
 		# ... and generate the sync
@@ -352,6 +381,7 @@ class Connection:
 		self.__setAcquisitionMode(1)
 		# Finally, disable sync reception
 		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 2, 0x0201, 0b00)
+		sleep(0.210)
 
 		# Check that the ASIC configuration has not changed after sync
 		for portID, slaveID in self.getActiveFEBDs():
@@ -361,7 +391,7 @@ class Connection:
 
 				status, readback = self.__doAsicCommand(portID, slaveID, chipID, "rdGlobalCfg")
 				if readback != initialGlobalAsicConfig[(portID, slaveID, chipID)]:
-					raise tofpet2b.ConfigurationErrorBadRead(portID, slaveID, chipID, initialGlobalAsicConfig[(portID, slaveID, chipID)], readback)
+					raise tofhir_v1.ConfigurationErrorBadRead(portID, slaveID, chipID, initialGlobalAsicConfig[(portID, slaveID, chipID)], readback)
 			
 		# Enable ASIC receiver logic for all ASIC
 		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 64, 0x0318, 0xFFFFFFFFFFFFFFFF)
@@ -375,79 +405,67 @@ class Connection:
 		# Set ASIC receiver logic to normal mode
 		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 1, 0x0301, 0b0)
 
-		# Reconfigure ASICs TX to normal mode
-		for portID, slaveID in self.getActiveFEBDs():
-			# Try all possible chips, as we don't have a list of active ASIC yet
-			for chipID in range(MAX_CHIPS):
-				# This chipID didn't respond properly before, skip
-				gID = chipID + MAX_CHIPS * slaveID + (MAX_CHIPS * MAX_SLAVES) * portID
-				if not asicConfigOK[gID]: continue
-
-				# Same configuration as before...
-				gcfg = initialGlobalAsicConfig[(portID, slaveID, chipID)]
-				# .. but with the TX logic to normal
-				gcfg.setValue("tx_mode", 0b10)
-				self.__doAsicCommand(portID, slaveID, chipID, "wrGlobalCfg", value=gcfg)
-
 		# Allow some ms for the deserializer to lock to the 8B/10B pattern
 		sleep(0.010)
 
-		# Check which ASICs are receiving properly data words
-		deserializerStatus = [ False for x in range(MAX_PORTS * MAX_SLAVES * MAX_CHIPS) ]
-		decoderStatus = [ False for x in range(MAX_PORTS * MAX_SLAVES * MAX_CHIPS) ]
+		## Check which ASICs are receiving properly data words
+		#deserializerStatus = [ False for x in range(MAX_PORTS * MAX_SLAVES * MAX_CHIPS) ]
+		#decoderStatus = [ False for x in range(MAX_PORTS * MAX_SLAVES * MAX_CHIPS) ]
 
-		for portID, slaveID in self.getActiveFEBDs():
-			lDeserializerStatus = self.read_config_register(portID, slaveID, 64, 0x0302)
-			lDecoderStatus = self.read_config_register(portID, slaveID, 64, 0x0310)
+		#for portID, slaveID in self.getActiveFEBDs():
+			#lDeserializerStatus = self.read_config_register(portID, slaveID, 64, 0x0302)
+			#lDecoderStatus = self.read_config_register(portID, slaveID, 64, 0x0310)
 
-			lDeserializerStatus = [ lDeserializerStatus & (1<<n) != 0 for n in range(MAX_CHIPS) ]
-			lDecoderStatus = [ lDecoderStatus & (1<<n) != 0 for n in range(MAX_CHIPS) ]
+			#lDeserializerStatus = [ lDeserializerStatus & (1<<n) != 0 for n in range(MAX_CHIPS) ]
+			#lDecoderStatus = [ lDecoderStatus & (1<<n) != 0 for n in range(MAX_CHIPS) ]
 
-			k = slaveID * MAX_CHIPS + portID * MAX_CHIPS * MAX_SLAVES
-			for n in range(MAX_CHIPS):
-				deserializerStatus[k+n] = lDeserializerStatus[n]
-				decoderStatus[k+n] = lDecoderStatus[n]
+			#k = slaveID * MAX_CHIPS + portID * MAX_CHIPS * MAX_SLAVES
+			#for n in range(MAX_CHIPS):
+				#deserializerStatus[k+n] = lDeserializerStatus[n]
+				#decoderStatus[k+n] = lDecoderStatus[n]
 
-		self.__activeAsics = {}
-		inconsistentStateAsics = []
-		for gID in range(MAX_PORTS * MAX_SLAVES * MAX_CHIPS):
-			statusTripplet = (asicConfigOK[gID], deserializerStatus[gID], decoderStatus[gID])
-			chipID = gID % MAX_CHIPS
-			slaveID = (gID / MAX_CHIPS) % MAX_SLAVES
-			portID = gID / (MAX_CHIPS * MAX_SLAVES)
+		#self.__activeAsics = {}
+		#inconsistentStateAsics = []
+		#for gID in range(MAX_PORTS * MAX_SLAVES * MAX_CHIPS):
+			#statusTripplet = (asicConfigOK[gID], deserializerStatus[gID], decoderStatus[gID])
+			#chipID = gID % MAX_CHIPS
+			#slaveID = (gID / MAX_CHIPS) % MAX_SLAVES
+			#portID = gID / (MAX_CHIPS * MAX_SLAVES)
 
-			if statusTripplet == (True, True, True):
-				# All OK, ASIC is present and OK
-				self.__activeAsics[(portID, slaveID, chipID)] = asicType[(portID, slaveID, chipID)]
-			elif statusTripplet == (False, False, False):
-				# All failed, ASIC is not present
-				pass
-			else:
-				# Something is not good
-				inconsistentStateAsics.append(((portID, slaveID, chipID), statusTripplet))
+			#if statusTripplet == (True, True, True):
+				## All OK, ASIC is present and OK
+				#self.__activeAsics[(portID, slaveID, chipID)] = asicType[(portID, slaveID, chipID)]
+			#elif statusTripplet == (False, False, False):
+				## All failed, ASIC is not present
+				#pass
+			#else:
+				## Something is not good
+				#inconsistentStateAsics.append(((portID, slaveID, chipID), statusTripplet))
 
-		if inconsistentStateAsics != []:
-			print "WARNING: ASICs with inconsistent presence detection results"
-			for portID, slaveID in self.getActiveFEBDs():
-				lst = []
-				for (lPortID, lSlaveID, lChipID), statusTripplet in inconsistentStateAsics:
-					if lPortID != portID or lSlaveID != slaveID: continue
-					lst.append((lChipID, statusTripplet))
+		#if inconsistentStateAsics != []:
+			#print "WARNING: ASICs with inconsistent presence detection results"
+			#for portID, slaveID in self.getActiveFEBDs():
+				#lst = []
+				#for (lPortID, lSlaveID, lChipID), statusTripplet in inconsistentStateAsics:
+					#if lPortID != portID or lSlaveID != slaveID: continue
+					#lst.append((lChipID, statusTripplet))
 				
-				if lst != []:
-					print " FEB/D (%2d, %2d)" % (portID, slaveID)
-					for chipID, statusTripplet in lst:
-						a, b, c = statusTripplet
-						a = a and "OK" or "FAIL"
-						b = b and "OK" or "FAIL"
-						c = c and "OK" or "FAIL"						
-						print "  ASIC %2d: config link: %4s data link pattern: %4s data word: %4s" % (chipID, a, b, c)
+				#if lst != []:
+					#print " FEB/D (%2d, %2d)" % (portID, slaveID)
+					#for chipID, statusTripplet in lst:
+						#a, b, c = statusTripplet
+						#a = a and "OK" or "FAIL"
+						#b = b and "OK" or "FAIL"
+						#c = c and "OK" or "FAIL"						
+						#print "  ASIC %2d: config link: %4s data link pattern: %4s data word: %4s" % (chipID, a, b, c)
 			
-			if maxTries > 1: 
-				print "Retrying..."
-				return self.initializeSystem(maxTries - 1)
-			else:
-				raise ErrorAsicPresenceInconsistent(inconsistentStateAsics)
+			#if maxTries > 1: 
+				#print "Retrying..."
+				#return self.initializeSystem(maxTries - 1)
+			#else:
+				#raise ErrorAsicPresenceInconsistent(inconsistentStateAsics)
+		
+		self.__activeAsics = asicType
 
 		self.__setSorterMode(True)
 
@@ -793,82 +811,113 @@ class Connection:
 		while True:
 			try:
 				return self.___doAsicCommand(portID, slaveID, chipID, command, value=value, channel=channel)
-			except tofpet2b.ConfigurationError as e:
+			except tofhir_v1.ConfigurationError as e:
 				nTry = nTry + 1
 				if nTry >= 5:
 					raise e
 
 
-	def ___doAsicCommand(self, portID, slaveID, chipID, command, value=None, channel=None):
+	def __buildAsicCommand(self, chipID, command, value=None, channel=None):
 		commandInfo = {
 		#	commandID 	: (code,   ch,   read, data length)
-			"wrChCfg"	: (0b0000, True, False, 125),
-			"rdChCfg"	: (0b0001, True, True, 125),
-			"wrGlobalCfg" 	: (0b1000, False, False, 184),
-			"rdGlobalCfg" 	: (0b1001, False, True, 184)
+			"wrChCfg"	: (0b0010, True, False, 130),
+			"rdChCfg"	: (0b0011, True, True, 130),
+			"wrGlobalCfg" 	: (0b0000, False, False, 222),
+			"rdGlobalCfg" 	: (0b0001, False, True, 222)
 		}
 	
 		commandCode, isChannel, isRead, dataLength = commandInfo[command]
-
-
-		ccBits = bitarray_utils.intToBin(commandCode, 4)
-
+		
+		cfg_chip_id = bitarray("0000"); # For now, we only support chip address 0
+		cfg_command = bitarray_utils.intToBin(commandCode, 4)
+		
 		if isChannel:
-			ccBits += bitarray_utils.intToBin(channel, 7)
+			cfg_channel_id = bitarray_utils.intToBin(channel, 4)
+		else:
+			cfg_channel_id = bitarray("0000")
+		
+		cfg_padding_1 = bitarray("0000")
 
+		cfg_payload = bitarray(28*8)
+		cfg_payload.setall(0)
 		if not isRead:
-			assert len(value) == dataLength
-			ccBits += value
+			cfg_payload[224 - dataLength:224] = value[0:dataLength]
+		
+		
+		
+		composed_command = cfg_payload + cfg_padding_1 + cfg_channel_id + cfg_command + cfg_chip_id
+		
+		composed_command = composed_command.tobytes()
+		composed_command = bytearray([ 0x01, chipID ]) + composed_command
+		
+		return composed_command
 
-		nBytes = int(math.ceil(len(ccBits) / 8.0))
-		paddedValue = ccBits + bitarray([ False for x in range((nBytes * 8) - dataLength) ])
-		byteX = [ ord(x) for x in paddedValue.tobytes() ]		
+		
+	def ___doAsicCommand(self, portID, slaveID, chipID, command, value=None, channel=None):
+		commandInfo = {
+		#	commandID 	: (code,   ch,   read, data length)
+			"wrChCfg"	: (0b0010, True, False, 130),
+			"rdChCfg"	: (0b0011, True, True, 130),
+			"wrGlobalCfg" 	: (0b0000, False, False, 222),
+			"rdGlobalCfg" 	: (0b0001, False, True, 222)
+		}
+	
+		commandCode, isChannel, isRead, dataLength = commandInfo[command]
+		
+		cfg_chip_id = bitarray("0000"); # For now, we only support chip address 0
+		cfg_command = bitarray_utils.intToBin(commandCode, 4)
+		
+		if isChannel:
+			cfg_channel_id = bitarray_utils.intToBin(channel, 4)
+		else:
+			cfg_channel_id = bitarray("0000")
+		
+		cfg_padding_1 = bitarray("0000")
+
+		cfg_payload = bitarray(28*8)
+		cfg_payload.setall(0)
+		if not isRead:
+			cfg_payload[224 - dataLength:224] = value[0:dataLength]
+		
+		
+		
+		composed_command = cfg_payload + cfg_padding_1 + cfg_channel_id + cfg_command + cfg_chip_id
+		
+		composed_command = composed_command.tobytes()
+		composed_command = bytearray([ 0x01, chipID ]) + composed_command
+			
+		reply = self.sendCommand(portID, slaveID, 0x01, composed_command)
+		
+		status = reply[0]
+		if status != 0x00:
+			raise tofhir_v1.ConfigurationErrorGeneric(portID, slaveID, chipID , status)
+
+		payload_length = reply[1]
+		if payload_length != 28:
+			raise tofhir_v1.ConfigurationErrorBadReply(1, len(reply))
+		
+		payload = reply[2:]
+		
+		payload_bits = bitarray()
+		payload_bits.frombytes(str(payload))
+		payload_bits = payload_bits[224 - dataLength:224]
 		
 		if isRead:
-			bitsToRead = dataLength
+			return 0x00, payload_bits
 		else:
-			bitsToRead = 0
-
-		nBitsToWrite= len(ccBits)
-		cmd = [ chipID, nBitsToWrite, bitsToRead] + byteX
-		cmd = bytearray(cmd)
-
-		reply = self.sendCommand(portID, slaveID, 0x01, cmd)
-		if len(reply) < 1: raise tofpet2b.ConfigurationErrorBadReply(1, len(reply))
-
-		status = reply[0]
-			
-		if status == 0xE3:
-			raise tofpet2b.ConfigurationErrorBadAck(portID, slaveID, chipID, 0)
-		elif status == 0xE4:
-			raise tofpet2b.ConfigurationErrorBadCRC(portID, slaveID, chipID )
-		elif status == 0xE5:
-			raise tofpet2b.ConfigurationErrorBadAck(portID, slaveID, chipID, 1)
-		elif status != 0x00:
-			raise tofpet2b.ConfigurationErrorGeneric(portID, slaveID, chipID , status)
-
-		if isRead:
-			expectedBytes = math.ceil(dataLength/8)
-			if len(reply) < (1+expectedBytes): 
-				print len(reply), (1+expectedBytes)
-				raise tofpet2b.ConfigurationErrorBadReply(2+expectedBytes, len(reply))
-			reply = str(reply[1:])
-			data = bitarray()
-			data.frombytes(reply)
-			value = data[0:dataLength]
-			return (status, value)
-		else:
-			# Check what we wrote
 			readCommand = 'rd' + command[2:]
 			readStatus, readValue = self.__doAsicCommand(portID, slaveID, chipID, readCommand, channel=channel)
 			if readValue != value:
-				raise tofpet2b.ConfigurationErrorBadRead(portID, slaveID, chipID, value, readValue)
+				raise tofhir_v1.ConfigurationErrorBadRead(portID, slaveID, chipID, value, readValue)
 
 			return (status, None)
+		
+		
+		return None
 
 	## Returns the configuration set in the ASICs registers as a dictionary of
 	## - key: a tuple (portID, slaveID, chipID)
-	## - value: a tofpet2.AsicConfig object
+	## - value: a chip_module.AsicConfig object
 	## @param forceAccess Ignores the software cache and forces hardware access.
 	def getAsicsConfig(self, forceAccess=False):
 		if (forceAccess is True) or (self.__asicConfigCache is None):
@@ -877,17 +926,17 @@ class Connection:
 			self.__asicConfigCache_TAC_Refresh = set()
 			
 			for portID, slaveID, chipID in self.getActiveAsics():
-				if self.getAsicSubtype(portID, slaveID, chipID) == "2B":
-					tofpet2 = tofpet2b
+				if self.getAsicSubtype(portID, slaveID, chipID) == "V1":
+					chip_module = tofhir_v1
 				else:
-					tofpet2 = tofpet2c
+					chip_module = tofhir_vxxxxx
 					
-				ac = tofpet2.AsicConfig()
+				ac = chip_module.AsicConfig()
 				status, value = self.__doAsicCommand(portID, slaveID, chipID, "rdGlobalCfg")
-				ac.globalConfig = tofpet2.AsicGlobalConfig(value)
-				for n in range(64):
+				ac.globalConfig = chip_module.AsicGlobalConfig(value)
+				for n in range(16):
 					status, value = self.__doAsicCommand(portID, slaveID, chipID, "rdChCfg", channel=n)
-					ac.channelConfig[n] = tofpet2.AsicChannelConfig(value)
+					ac.channelConfig[n] = chip_module.AsicChannelConfig(value)
 					
 				# Store the ASIC configuration
 				self.__asicConfigCache[(portID, slaveID, chipID)] = ac
@@ -920,7 +969,7 @@ class Connection:
 					tacRefreshHardwareUpdated = True
 				cachedAC.globalConfig = deepcopy(newGC)
 			
-			for channelID in range(64):
+			for channelID in range(16):
 				cachedCC = cachedAC.channelConfig[channelID]
 				newCC = newAC.channelConfig[channelID]
 				
@@ -936,7 +985,7 @@ class Connection:
 			for portID, slaveID, chipID in self.getActiveAsics():
 				cachedAC = self.__asicConfigCache[(portID, slaveID, chipID)]
 				cachedGC = cachedAC.globalConfig
-				for channelID in range(64):
+				for channelID in range(16):
 					cachedCC = cachedAC.channelConfig[channelID]
 					tacRefreshPeriod_1 = cachedGC.getValue("tac_refresh_period")
 					tacRefreshPeriod_2 = cachedCC.getValue("tac_max_age")
@@ -1013,6 +1062,8 @@ class Connection:
         # @param step2 Tag to a given variable specific to this acquisition
         # @param acquisitionTime Acquisition time in seconds 
 	def acquire(self, acquisitionTime, step1, step2):
+		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 1, 0x0320, 0b0) 
+		
 		(pin, pout) = (self.__helperPipe.stdin, self.__helperPipe.stdout)
 		frameLength = 1024.0 / self.__systemFrequency
 		nRequiredFrames = int(acquisitionTime / frameLength)
@@ -1092,9 +1143,13 @@ class Connection:
 		# Check ASIC link status at end of acquisition
 		self.checkAsicRx()
 
+		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 1, 0x0320, 0b1) 
 		return None
 	
 	def checkAsicRx(self):
+		# Link status currently not supported by firmware
+		return None
+	
 		bad_rx_found = False
 		for portID, slaveID in self.getActiveFEBDs():
 			asic_enable_vector = self.read_config_register(portID, slaveID, 64, 0x0318)
@@ -1164,10 +1219,12 @@ class Connection:
 				for i in range(nEvents):
 					events.append((	self.__shm.getChannelID(index, i), \
 							self.__shm.getTacID(index, i), \
-							self.__shm.getTCoarse(index, i), \
-							self.__shm.getECoarse(index, i), \
-							self.__shm.getTFine(index, i), \
-							self.__shm.getEFine(index, i), \
+							self.__shm.getT1Coarse(index, i), \
+							self.__shm.getT1Fine(index, i), \
+							self.__shm.getT2Coarse(index, i), \
+							self.__shm.getT2Fine(index, i), \
+							self.__shm.getQCoarse(index, i), \
+							self.__shm.getQFine(index, i), \
 						))
 
 				r = { "id" : frameID, "lost" : frameLost, "events" : events }

@@ -4,7 +4,7 @@ import os.path
 import re
 from sys import stderr
 from string import upper
-import tofpet2b, tofpet2c
+import tofhir_v1
 import bitarray
 import math
 
@@ -138,7 +138,7 @@ class Config:
 		if (self.__loadMask & LOAD_DISC_CALIBRATION) != 0:
 			for portID, slaveID, chipID in asicsConfig.keys():
 				ac = asicsConfig[(portID, slaveID, chipID)]
-				for channelID in range(64):
+				for channelID in range(16):
 					baseline_t, baseline_e = self.getAsicChannelDefaultBaselineSettings((portID, slaveID, chipID, channelID))
 					cc = ac.channelConfig[channelID]
 					cc.setValue("baseline_t", baseline_t)
@@ -148,7 +148,7 @@ class Config:
 		if (self.__loadMask & LOAD_DISC_SETTINGS) != 0:
 			for portID, slaveID, chipID in asicsConfig.keys():
 				ac = asicsConfig[(portID, slaveID, chipID)]
-				for channelID in range(64):
+				for channelID in range(16):
 					vth_t1, vth_t2, vth_e = self.getAsicChannelDefaultThresholds((portID, slaveID, chipID, channelID))
 					cc = ac.channelConfig[channelID]
 					
@@ -249,8 +249,8 @@ def parseAsicParameters(configParser):
 		return {}
 	
 	t = {}
-	gk = set(tofpet2b.AsicGlobalConfig().getKeys() + tofpet2c.AsicGlobalConfig().getKeys())
-	ck = set(tofpet2b.AsicChannelConfig().getKeys() + tofpet2c.AsicChannelConfig().getKeys())
+	gk = set(tofhir_v1.AsicGlobalConfig().getKeys() + tofhir_v1.AsicGlobalConfig().getKeys())
+	ck = set(tofhir_v1.AsicChannelConfig().getKeys() + tofhir_v1.AsicChannelConfig().getKeys())
 	for key, value in configParser.items("asic_parameters"):
 		if key[0:7] == "global.":
 			k = key[7:]

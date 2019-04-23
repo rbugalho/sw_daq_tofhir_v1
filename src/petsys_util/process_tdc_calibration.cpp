@@ -36,7 +36,7 @@ using namespace PETSYS;
 
 
 struct RawCalibrationData{
-	uint64_t eventWord;
+	unsigned __int128 eventWord;
 	int freq;
 };
 
@@ -223,9 +223,9 @@ void sortData(char *inputFilePrefix, char *tmpFilePrefix)
 		fread(tmpRawCalDataBlock, sizeof(RawCalibrationData), nCalData, dataFile);	
 		for (int i = 0; i < nCalData; i++) {
 			
-			RawEventWord *eWord =  new RawEventWord(tmpRawCalDataBlock[i].eventWord);   
-			unsigned gChannelID = eWord->getChannelID();
-			unsigned tacID = eWord->getTacID();	       
+			RawEventWord eWord(tmpRawCalDataBlock[i].eventWord);   
+			unsigned gChannelID = eWord.getChannelID();
+			unsigned tacID = eWord.getTacID();	       
 			unsigned gAsicID = (gChannelID >> 6);
 
 			maxgAsicID = (maxgAsicID > gAsicID) ? maxgAsicID : gAsicID;
@@ -251,8 +251,8 @@ void sortData(char *inputFilePrefix, char *tmpFilePrefix)
 			CalibrationData calData;
 			// Write data for T branch
 			calData.gid = (gChannelID << 3) | (tacID << 1) | 0x0;
-			calData.coarse = eWord->getTCoarse();
-			calData.fine = eWord->getTFine();
+			calData.coarse = eWord.getT1Coarse();
+			calData.fine = 1023 - eWord.getT1Fine(); // This transformation allows re-use of TOFPET 2 code
 			calData.freq = tmpRawCalDataBlock[i].freq;
 			calData.phase = step1;
 
@@ -260,8 +260,8 @@ void sortData(char *inputFilePrefix, char *tmpFilePrefix)
 		
 			// Write data for E branch
 			calData.gid = (gChannelID << 3) | (tacID << 1) | 0x1;
-			calData.coarse = eWord->getECoarse();
-			calData.fine = eWord->getEFine();
+			calData.coarse = eWord.getT2Coarse();
+			calData.fine = 1023 - eWord.getT2Fine(); // This transformation allows re-use of TOFPET 2 code
 			calData.freq = tmpRawCalDataBlock[i].freq;
 			calData.phase = step1;			
 			fwrite(&calData, sizeof(CalibrationData), 1, f);
@@ -332,7 +332,7 @@ void calibrateAsic(
 
 	
 	unsigned long gidStart = gAsicID * 64 * 2 * 4;
-	unsigned long gidEnd = (gAsicID+1) * 64 * 4 * 2;
+	unsigned long gidEnd = gidStart + (16 * 2 * 4);
 	unsigned long nTAC = gidEnd - gidStart;
 
 	// Build the histograms
@@ -505,9 +505,9 @@ void calibrateAsic(
 		}
 		
 		float estimatedM = - fPol->GetParameter(1);
-		if(estimatedM < 100.0 || estimatedM > 256.0) {
+		if(estimatedM < 250 || estimatedM > 600) {
 			fprintf(stderr, "WARNING: M (%6.1f) is out of range[%6.1f, %6.1f]. Skipping TAC (%02u %02d %02d %02d %u %c)\n",
-				estimatedM, 100.0, 256.0,
+				estimatedM, 250.0, 600.0,
 				portID, slaveID, chipID, channelID, tacID, bStr);
 			continue;
 		}
