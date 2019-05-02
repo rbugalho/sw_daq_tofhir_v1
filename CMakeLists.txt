@@ -101,8 +101,8 @@ target_link_libraries("convert_raw_to_coincidence" common)
 add_executable("convert_raw_to_singles" "src/petsys_util/convert_raw_to_singles.cpp" )
 target_link_libraries("convert_raw_to_singles" common)
 # 
-# add_executable("print_raw" "src/petsys_util/print_raw.cpp" )
-# target_link_libraries("print_raw" common)
+add_executable("print_raw" "src/petsys_util/print_raw.cpp" )
+target_link_libraries("print_raw" common)
 # 
 # add_executable("merge_raw" "src/petsys_util/merge_raw.cpp" )
 # target_link_libraries("merge_raw" common)

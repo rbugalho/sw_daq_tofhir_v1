@@ -117,20 +117,20 @@ int main(int argc, char *argv[])
 			
 			
 			printf("%04d %016llx Size: %-4llu FrameID: %-20llu\n", 0, tmpRawDataFrame->data[0], tmpRawDataFrame->getFrameSize(), frameID);
-			printf("%04d %016llx nEvents: %20llu %4s\n", 1,  tmpRawDataFrame->data[1], tmpRawDataFrame->getNEvents(), frameLost ? "LOST" : "");
+			printf("%04d %016llx nEvents: %20llu %4s\n", 1,  tmpRawDataFrame->data[1], nEvents, frameLost ? "LOST" : "");
 			
 			for (int i = 0; i < nEvents; i++) {
 
-				unsigned long channelID = tmpRawDataFrame->getChannelID(i);
-				unsigned long tacID = tmpRawDataFrame->getTacID(i);
-				unsigned long tCoarse = tmpRawDataFrame->getTCoarse(i);
-				unsigned long eCoarse = tmpRawDataFrame->getECoarse(i);
-				unsigned long tFine = tmpRawDataFrame->getTFine(i);
-				unsigned long eFine = tmpRawDataFrame->getEFine(i);
+ 				unsigned int channelID = tmpRawDataFrame->getEventWord(i).getChannelID();
+				unsigned long tacID = tmpRawDataFrame->getEventWord(i).getTacID();
+				unsigned long tCoarse = tmpRawDataFrame->getEventWord(i).getT1Coarse();
+				unsigned long eCoarse = tmpRawDataFrame->getEventWord(i).getT2Coarse();
+				unsigned long tFine = tmpRawDataFrame->getEventWord(i).getT1Fine();
+				unsigned long eFine = tmpRawDataFrame->getEventWord(i).getT2Fine();
 				
 				printf("%04d %016llx", i+2,  tmpRawDataFrame->data[i+2]);
-				printf(" ChannelID: (%02d %02d %02d %02d)", (channelID >> 17) % 32, (channelID >> 12) % 32, (channelID >> 6) % 64, (channelID % 64));
-				printf(" TacID: %d TCoarse: %4d TFine: %4d ECoarse: %4d EFine: %4d", tacID, tCoarse, tFine, eCoarse, eFine);
+ 				printf(" ChannelID: (%02u %02u %02u %02u)", (channelID >> 17) % 32, (channelID >> 12) % 32, (channelID >> 6) % 64, (channelID % 64));
+ 				printf(" TacID: %d T1Coarse: %4d T1Fine: %4d T2Coarse: %4d T2Fine: %4d", tacID, tCoarse, tFine, eCoarse, eFine);
 				printf("\n");
 			}
 			

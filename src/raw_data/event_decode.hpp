@@ -25,7 +25,7 @@ public:
 	unsigned short getIdleTime()    { return (word >> 60) % 1024; };
 	unsigned short getTriggerBits() { return (word >> 70) % 16; };
 	unsigned short getTacID()      { return (word >> 74) % 4; };
-	unsigned short getChannelID()   { return word >> 76; };
+	unsigned int getChannelID()   { return word >> 76; };
 	
 	
 // 	unsigned getEFine() {

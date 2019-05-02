@@ -38,15 +38,14 @@ struct RawDataFrame {
 	
 	RawEventWord getEventWord(int event)
 	{
-		unsigned __int128 word = 0x0;
 		uint64_t word_h = data[2 + 2*event + 0];
 		uint64_t word_l = data[2 + 2*event + 1];
 		
-		word_h &= 0xfffffffffff;
-		word_l &= 0xfffffffffff;
+		unsigned __int128 word = 0x0;
+		word = (word_h >> 54);  // Port ID, slave ID
+		word = (word << 44) | (word_h & 0xfffffffffff); // Event top half
+		word = (word << 44) | (word_l & 0xfffffffffff); // Event bottom
 		
-		word = word_h;
-		word = (word << 44) | word_l;
 		return RawEventWord(word);
 	}
 
@@ -101,7 +100,7 @@ public:
 	unsigned short getIdleTime(int index, int event)    { return getRawDataFrame(index)->getEventWord(event).getIdleTime(); };
 	unsigned short getTriggerBits(int index, int event) { return getRawDataFrame(index)->getEventWord(event).getTriggerBits(); };
 	unsigned short getTacID(int index, int event)       { return getRawDataFrame(index)->getEventWord(event).getTacID(); };
-	unsigned short getChannelID(int index, int event)   { return getRawDataFrame(index)->getEventWord(event).getChannelID(); };
+	unsigned int getChannelID(int index, int event)   { return getRawDataFrame(index)->getEventWord(event).getChannelID(); };
 	
 // 	unsigned getEFine(int index, int event) {
 // 		return  getRawDataFrame(index)->getEFine(event);
