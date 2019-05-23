@@ -16,6 +16,7 @@
 
 #include <shm_raw.hpp>
 #include <event_decode.hpp>
+#include <ProcessHit.hpp>
 
 #include <boost/random.hpp>
 #include <boost/nondet_random.hpp>
@@ -252,7 +253,7 @@ void sortData(char *inputFilePrefix, char *tmpFilePrefix)
 			// Write data for T branch
 			calData.gid = (gChannelID << 3) | (tacID << 1) | 0x0;
 			calData.coarse = eWord.getT1Coarse();
-			calData.fine = 1023 - eWord.getT1Fine(); // This transformation allows re-use of TOFPET 2 code
+			calData.fine = ProcessHit::remapADC(eWord.getT1Fine());
 			calData.freq = tmpRawCalDataBlock[i].freq;
 			calData.phase = step1;
 
@@ -261,7 +262,7 @@ void sortData(char *inputFilePrefix, char *tmpFilePrefix)
 			// Write data for E branch
 			calData.gid = (gChannelID << 3) | (tacID << 1) | 0x1;
 			calData.coarse = eWord.getT2Coarse();
-			calData.fine = 1023 - eWord.getT2Fine(); // This transformation allows re-use of TOFPET 2 code
+			calData.fine = ProcessHit::remapADC(eWord.getT2Fine());
 			calData.freq = tmpRawCalDataBlock[i].freq;
 			calData.phase = step1;			
 			fwrite(&calData, sizeof(CalibrationData), 1, f);

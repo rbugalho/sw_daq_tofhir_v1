@@ -53,6 +53,7 @@ namespace PETSYS {
 		double sw_trigger_group_time_window;
 		double sw_trigger_coincidence_time_window;
 		
+		int adc_fix;
 
 		static SystemConfig *fromFile(const char *configFileName);
 		static SystemConfig *fromFile(const char *configFileName, uint64_t mask);

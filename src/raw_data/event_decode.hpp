@@ -9,18 +9,15 @@ namespace PETSYS {
 
 class RawEventWord{
 
-private:
-	unsigned short adc_map(unsigned short v) { return (v < 512) ? (512 - v) : (v); };
-
 public:
 	RawEventWord(unsigned __int128 word) : word(word){};
 	~RawEventWord() {};
 	
-	unsigned short getQFine()       { return adc_map ((word >> 0) % 1024); };
+	unsigned short getQFine()       { return (word >> 0) % 1024; };
 	unsigned short getQCoarse()     { return (word >> 10) % 1024; };
-	unsigned short getT2Fine()      { return adc_map ((word >> 20) % 1024); };
+	unsigned short getT2Fine()      { return (word >> 20) % 1024; };
 	unsigned short getT2Coarse()    { return (word >> 30) % 1024; };
-	unsigned short getT1Fine()      { return adc_map ((word >> 40) % 1024); };
+	unsigned short getT1Fine()      { return (word >> 40) % 1024; };
 	unsigned short getT1Coarse()    { return (word >> 50) % 1024; };
 	unsigned short getIdleTime()    { return (word >> 60) % 1024; };
 	unsigned short getTriggerBits() { return (word >> 70) % 16; };

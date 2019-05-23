@@ -44,8 +44,16 @@ EventBuffer<Hit> * ProcessHit::handleEvents (EventBuffer<RawHit> *inBuffer)
 		
 		out.time = in.time;
 		if(useTDC) {
-			// The following transformation is used in process_tdc_calibration to allow re-use of TOFPET 2 code
-			unsigned short tfine = 1023 - in.t1fine; 
+			unsigned short tfine = remapADC(in.t1fine); 
+			if((systemConfig->adc_fix == 1) && (tfine >= 512)) {
+				eventFlags |= 0x10;
+			}
+			else if(systemConfig->adc_fix == 2) {
+				// Force LSB to 0 for all events
+				tfine &= 0x3FE;
+			}
+			
+			
 			float q_T = ( -ct.a1 + sqrtf((ct.a1 * ct.a1) - (4.0f * (ct.a0 - tfine) * ct.a2))) / (2.0f * ct.a2) ;
 			out.time = in.time - q_T - ct.t0;
 			if(ct.a1 == 0) eventFlags |= 0x2;
@@ -53,8 +61,7 @@ EventBuffer<Hit> * ProcessHit::handleEvents (EventBuffer<RawHit> *inBuffer)
 		
 		out.timeEnd = in.timeEnd;
 		if(useTDC) {
-			// The following transformation is used in process_tdc_calibration to allow re-use of TOFPET 2 code
-			unsigned short tfine = 1023 - in.t2fine;
+			unsigned short tfine = remapADC(in.t2fine);
 			float q_E = ( -ce.a1 + sqrtf((ce.a1 * ce.a1) - (4.0f * (ce.a0 - tfine) * ce.a2))) / (2.0f * ce.a2) ;
 			out.timeEnd = in.timeEnd - q_E - ce.t0;
 			if(ce.a1 == 0) eventFlags |= 0x2;
