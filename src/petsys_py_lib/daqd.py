@@ -894,7 +894,7 @@ class Connection:
 
 		payload_length = reply[1]
 		if payload_length != 28:
-			raise tofhir_v1.ConfigurationErrorBadReply(1, len(reply))
+			raise tofhir_v1.ConfigurationErrorBadReply(28, len(reply))
 		
 		payload = reply[2:]
 		
@@ -992,7 +992,7 @@ class Connection:
 					self.__asicConfigCache_TAC_Refresh.add((tacRefreshPeriod_1, tacRefreshPeriod_2))
 					
 			
-				
+	  			
 		return None
 	
 	def getBiasType(self, portID, slaveID):
