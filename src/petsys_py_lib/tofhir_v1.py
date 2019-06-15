@@ -111,6 +111,10 @@ class AsicGlobalConfig(bitarray):
 		self.setValue("counter_en", 0b0)
 		self.setValue("counter_period", 0b110)
 
+		# Enable the TAC refresh
+		self.setValue("tac_refresh_en", 0b1)
+		self.setValue("tac_refresh_period", 5)
+
 		return None
 
 	def __deepcopy__(self, memo):
@@ -238,7 +242,7 @@ class AsicChannelConfig(bitarray):
 		self.setValue("max_intg_time", 34)
 
 		# Avoid powers of 2
-		self.setValue("tac_max_age", 30)
+		self.setValue("tac_max_age", 10)
 		
 		# This setting gives better time resolution
 		self.setValue("fe_delay", 14)
