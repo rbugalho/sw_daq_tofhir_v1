@@ -45,7 +45,8 @@ EventBuffer<Hit> * ProcessHit::handleEvents (EventBuffer<RawHit> *inBuffer)
 		out.time = in.time;
 		if(useTDC) {
 			unsigned short tfine = remapADC(in.t1fine); 
-			if((systemConfig->adc_fix == 1) && (tfine >= 512)) {
+			if((systemConfig->adc_fix == 1) && (tfine <= 512)) {
+				// Remove events with raw t1fine >= 512
 				eventFlags |= 0x10;
 			}
 			else if(systemConfig->adc_fix == 2) {
