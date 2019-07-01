@@ -80,16 +80,17 @@ class AsicGlobalConfig(bitarray):
 
 		self[0:222] = bitarray('100000111101110111111100110100101111111111100110001110110111101011111111111011011001101111101101110100111010010000000111100101100001101001110101111101110000000000000000000000000000000000000000000000000001000000000000000100')
 		
-		# WARNING These values were set by experimental adjustment
-		# tdc global dac adjust due to mismatch
-		self.setValue("tdc_global_dac", 42)
-		# main global dac adjustment due to mismatch
-		self.setValue("main_global_dac", 0b10111) ## WARNING
 
 		# INFO: values set from simulation
 		self.setValue("main_global_dac", 0b10111)
 		self.setValue("tdc_global_dac", 0b110100)
 		
+		# tdc global dac adjust due to mismatch
+		# WARNING These values were set by experimental adjustment
+		# main global dac adjustment due to mismatch
+		#self.setValue("main_global_dac", 0b10111) ## WARNING
+		self.setValue("tdc_global_dac", 42)
+
 		# WARNING: Pushing these values to maximum seems to lead to better SPTR
 		# but also push power consumption. Needs more study
 		#self.setValue("fe_ib2", 0b0100000)
@@ -258,6 +259,9 @@ class AsicChannelConfig(bitarray):
 		
 		# Enable 3 SAR conversions
 		self.setValue("branch_en", 0b111)
+
+		# Shortest metastability delay
+		self.setValue("metastability", 0b10)
 
 		return None
 
