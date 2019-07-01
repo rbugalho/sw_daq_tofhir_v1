@@ -18,7 +18,7 @@ set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DLINUX" )
 set( CMAKE_REQUIRED_DEFINITIONS -DLINUX )
 endif()
 
-check_include_files( "pfp_api.h" HAVE_PFP_KX7 )
+#check_include_files( "pfp_api.h" HAVE_PFP_KX7 )
 
 set (DAQD_SOURCES "src/daqd/daqd.cpp" "src/daqd/Client.cpp" "src/daqd/FrameServer.cpp" "src/daqd/UDPFrameServer.cpp" "src/raw_data/shm_raw.cpp" )
 if(HAVE_PFP_KX7)
