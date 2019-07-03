@@ -10,11 +10,32 @@ import time
 
 def main():
 	parser = argparse.ArgumentParser(description="Initialize system and print status.")
-	
+	parser.add_argument("--config", type=str, required=False, default=None, help="Configuration file")
+	parser.add_argument("--print-bits", dest="print_bits", action="store_true", help="Print configuration bit vector")
+
+
 	args = parser.parse_args()
 
 	connection = daqd.Connection()
 	connection.initializeSystem()
+	
+	if args.config is not None:
+		systemConfig = config.ConfigFromFile(args.config)
+		systemConfig.loadToHardware(connection, bias_enable=config.APPLY_BIAS_OFF, hw_trigger_enable=False)
+		
+	if args.print_bits:
+		asicsConfig = connection.getAsicsConfig()
+		if asicsConfig.values() == []:
+			print "ERROR: No ASIC found to print configuration"
+			return 1
+		
+		ac = asicsConfig.values()[0]
+		print "GLOBAL CONFIG"
+		print ac.globalConfig
+		print "CHANNEL 15 CONFIG"
+		print ac.channelConfig[15]
+		
+
 
 
 if __name__ == "__main__":
