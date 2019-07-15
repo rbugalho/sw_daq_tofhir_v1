@@ -1062,8 +1062,6 @@ class Connection:
         # @param step2 Tag to a given variable specific to this acquisition
         # @param acquisitionTime Acquisition time in seconds 
 	def acquire(self, acquisitionTime, step1, step2):
-		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 1, 0x0320, 0b0) 
-		
 		(pin, pout) = (self.__helperPipe.stdin, self.__helperPipe.stdout)
 		frameLength = 1024.0 / self.__systemFrequency
 		nRequiredFrames = int(acquisitionTime / frameLength)
@@ -1143,7 +1141,6 @@ class Connection:
 		# Check ASIC link status at end of acquisition
 		self.checkAsicRx()
 
-		for portID, slaveID in self.getActiveFEBDs(): self.write_config_register(portID, slaveID, 1, 0x0320, 0b1) 
 		return None
 	
 	def checkAsicRx(self):
