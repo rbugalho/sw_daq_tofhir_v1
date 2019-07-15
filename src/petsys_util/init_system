@@ -32,9 +32,10 @@ def main():
 		ac = asicsConfig.values()[0]
 		print "GLOBAL CONFIG"
 		print ac.globalConfig
+		ac.globalConfig.printAllValues()
 		print "CHANNEL 15 CONFIG"
 		print ac.channelConfig[15]
-		
+		ac.channelConfig[15].printAllValues()
 
 
 
