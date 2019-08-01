@@ -1,5 +1,6 @@
 #include "CoincidenceGrouper.hpp"
 #include <math.h>
+#include <iostream>
 
 using namespace PETSYS;
 
@@ -32,10 +33,15 @@ EventBuffer<Coincidence> * CoincidenceGrouper::handleEvents(EventBuffer<GammaPho
 	for(unsigned i = 0; i < N; i++) {
 		GammaPhoton &photon1 = inBuffer->get(i);
 		for(unsigned j = i+1; j < N; j++) {
-			GammaPhoton &photon2 = inBuffer->get(j);			
+			GammaPhoton &photon2 = inBuffer->get(j);
+			//	std::cout << "i "<<i << "j " << j <<" t1 " <<photon1.time << " t2 " << photon2.time << " Deltat "<< photon1.time-photon2.time<< " overlap "<< overlap <<" cwin "<< cWindow <<std::endl; 
+			//			printf("t1 %lf t2 %lf  dt %lf compared to %lf \n", photon1.time, photon2.time, photon1.time - photon2.time, overlap+cWindow);
+			//printf("if(overlap+cwin): %d if(region allowed): %d if(cwin): %d  ", ((photon2.time - photon1.time) > (overlap + cWindow)),(systemConfig->isCoincidenceAllowed(photon1.region, photon2.region)), (fabs(photon1.time - photon2.time) <= cWindow ));
+			//printf("\n");
 			if ((photon2.time - photon1.time) > (overlap + cWindow)) break;
-			
+			//printf("%lf %lf\n", photon1.time, photon2.time);
 			if(!systemConfig->isCoincidenceAllowed(photon1.region, photon2.region)) continue;
+			
 			
 			if(fabs(photon1.time - photon2.time) <= cWindow) {
 				Coincidence &c = outBuffer->getWriteSlot();
