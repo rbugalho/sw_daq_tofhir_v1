@@ -88,7 +88,7 @@ class AsicGlobalConfig(bitarray):
 		# tdc global dac adjust due to mismatch
 		# WARNING These values were set by experimental adjustment
 		# main global dac adjustment due to mismatch
-		#self.setValue("main_global_dac", 23) ## WARNING
+		self.setValue("main_global_dac", 20) # Taken from experimental work with simulation
 		self.setValue("tdc_global_dac", 42)
 
 		# WARNING: Pushing these values to maximum seems to lead to better SPTR
