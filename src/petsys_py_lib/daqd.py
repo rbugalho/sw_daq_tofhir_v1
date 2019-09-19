@@ -306,9 +306,10 @@ class Connection:
 		
 		## Step 1
 		## Blindly set the ASIC's global configuration to math the FEB/D firmware build
+		POSSIBLE_CHIP_LIST = [ n for n in range(MAX_CHIPS) ]
 		for portID, slaveID in self.getActiveFEBDs():
 			tdc_clk_div, ddr, tx_nlinks = self.__getAsicLinkConfiguration(portID, slaveID)
-			for chipID in range(MAX_CHIPS):
+			for chipID in POSSIBLE_CHIP_LIST:
 				try:
 					# Upload default configuration, adjusted for FEB/D firmware RX build
 					chip_module = tofhir_v1
@@ -330,7 +331,7 @@ class Connection:
 			# Enable ASIC RX logic
 			self.write_config_register(portID, slaveID, 64, 0x0318, 0xFFFFFFFFFFFFFFFF)
 			tdc_clk_div, ddr, tx_nlinks = self.__getAsicLinkConfiguration(portID, slaveID)
-			for chipID in range(MAX_CHIPS):
+			for chipID in POSSIBLE_CHIP_LIST:
 				try:
 					status, readback = self.__doAsicCommand(portID, slaveID, chipID, "rdGlobalCfg")
 				except tofhir_v1.ConfigurationError as e:
@@ -385,7 +386,7 @@ class Connection:
 
 		# Check that the ASIC configuration has not changed after sync
 		for portID, slaveID in self.getActiveFEBDs():
-			for chipID in range(MAX_CHIPS):
+			for chipID in POSSIBLE_CHIP_LIST:
 				gID = chipID + MAX_CHIPS * slaveID + (MAX_CHIPS * MAX_SLAVES) * portID
 				if not asicConfigOK[gID]: continue
 
@@ -864,7 +865,20 @@ class Connection:
 	
 		commandCode, isChannel, isRead, dataLength = commandInfo[command]
 		
-		cfg_chip_id = bitarray("0000"); # For now, we only support chip address 0
+		
+		## TOFHiR test board
+		## Only 1 chip per RX bus
+		cfg_bus_id = chipID
+		cfg_chip_id = bitarray("0000")
+
+		## BTL FE v1
+		## 6 chips per bus
+		## cfg_bus_id is 3, because it's FEB/D port 3, ASIC 0
+		#cfg_bus_id = 4 + (chipID / 8)
+		#cfg_chip_id = chipID % 8
+		#cfg_chip_id = bitarray_utils.intToBin(cfg_chip_id, 4)
+		
+		
 		cfg_command = bitarray_utils.intToBin(commandCode, 4)
 		
 		if isChannel:
@@ -884,7 +898,7 @@ class Connection:
 		composed_command = cfg_payload + cfg_padding_1 + cfg_channel_id + cfg_command + cfg_chip_id
 		
 		composed_command = composed_command.tobytes()
-		composed_command = bytearray([ 0x01, chipID ]) + composed_command
+		composed_command = bytearray([ 0x01, cfg_bus_id ]) + composed_command
 			
 		reply = self.sendCommand(portID, slaveID, 0x01, composed_command)
 		
