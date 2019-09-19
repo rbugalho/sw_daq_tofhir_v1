@@ -29,7 +29,6 @@ class AsicGlobalConfig(bitarray):
 			"tx_nlinks"	 : [16, 15],
 			"tx_mode"	 : [18, 17],
 			"veto_en"	 : [19],
-			"fe_test_pulse"	 : [20],
 			"tgr_enable"	 : [21],
 			"tgr_wnd_a"	 : [33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22],
 			"tgr_wnd_z"	 : [45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34],
@@ -67,7 +66,7 @@ class AsicGlobalConfig(bitarray):
 			"v_att_ls_bias_ig"	 : [208, 207, 206, 205, 204, 203],
 			"v_integ_ref_ig"	 : [214, 213, 212, 211, 210, 209],
 			"cg2_sw_n"	 : [215],
-			"fetp_en"	 : [220],
+			"fetp_en"	 : [220, 20],
 			"input_pol"	 : [221]
 		}
 

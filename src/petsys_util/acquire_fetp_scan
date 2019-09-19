@@ -3,60 +3,61 @@
 
 from petsys import daqd, config
 from copy import deepcopy
+from time import sleep
 import argparse
 
 parser = argparse.ArgumentParser(description='Acquire data for TDC calibration')
 parser.add_argument("--config", type=str, required=True, help="Configuration file")
 parser.add_argument("-o", type=str, dest="fileNamePrefix", required=True, help="Data filename (prefix)")
 parser.add_argument("--time", type=float, required=True, help="Acquisition time (in seconds)")
-parser.add_argument("--mode", type=str, required=True, choices=["tot", "qdc"], help="Acquisition mode (ToT or QDC)")
-parser.add_argument("--enable-hw-trigger", dest="hwTrigger", action="store_true", help="Enable the hardware coincidence filter")
 args = parser.parse_args()
 
-systemConfig = config.ConfigFromFile(args.config)
+systemConfig = config.ConfigFromFile(args.config, loadMask=0)
 
 daqd = daqd.Connection()
 daqd.initializeSystem()
-systemConfig.loadToHardware(daqd, bias_enable=config.APPLY_BIAS_ON, hw_trigger_enable=args.hwTrigger)
-
-qdcMode = args.mode == "qdc"
+systemConfig.loadToHardware(daqd, bias_enable=config.APPLY_BIAS_OFF)
 
 asicsConfig = daqd.getAsicsConfig()
 for ac in asicsConfig.values():
 	gc = ac.globalConfig
-	gc.setValue("fetp_enable", 0b1)			# Enable FETP for ASIC
+	gc.setValue("fetp_en", 0b11)			# Enable FETP for ASIC
+	gc.setValue("tp_ext_en", 0b1)			# Enable externa TP
 	for cc in ac.channelConfig:
 		cc.setValue("trigger_mode_1", 0b11)	# Disable channel from triggering
-		cc.setValue("fe_tp_en", 0b01)		# Disable FETP for channel but enable channel's capacitance
+		cc.setValue("fetp_en", 0b01)		# Disable FETP for channel but enable channel's capacitance
 
-
-		if not qdcMode:
-			cc.setValue("qdc_mode", 0)
-			cc.setValue("intg_en", 0)
-			cc.setValue("intg_signal_en", 0)
-		else:
-			cc.setValue("qdc_mode", 1)
-			cc.setValue("intg_en", 1)
-			cc.setValue("intg_signal_en", 1)
-			
+		cc.setValue("trigger_mode_2_t1", 0b00)
+		cc.setValue("trigger_mode_2_t2", 0b00)
+		cc.setValue("trigger_mode_2_q", 0b00)
+		cc.setValue("trigger_mode_2_v", 0b01)
+		cc.setValue("trigger_mode_2_b", 0b000)
 
 daqd.setAsicsConfig(asicsConfig)
-daqd.setTestPulsePLL(200, 400*1024, 0, False)
-daqd.openRawAcquisition(args.fileNamePrefix, qdcMode=qdcMode)
+daqd.setTestPulsePLL(400, 400*1024, 0, False)
+daqd.openRawAcquisition(args.fileNamePrefix, qdcMode=False)
 
-for channel in range(0,64):
-	for step1 in range(16,32):
-		asicsConfig2 = deepcopy(asicsConfig)
-		for ac in asicsConfig2.values():
-			gc = ac.globalConfig
-			gc.setValue("v_cal_ref_ig", step1)	# Set FETP amplitude
-			cc = ac.channelConfig[channel]
-			cc.setValue("fe_tp_en", 0b11)		# Enable FETP for channel
-			cc.setValue("trigger_mode_1", 0b00)	# Set channel to normal trigger mode
-		
-		daqd.setAsicsConfig(asicsConfig2)
-		print "Acquiring channel %2d DAC %2d" % (channel, step1)
-		daqd.acquire(args.time, step1, 0);
+for channel in range(0,16, 1):
+	for step1 in [0]:
+		for step2:
+			amplitude = 28
+			period =  1024 * 2000 + 1
+			phase = 0
+
+			daqd.setTestPulsePLL(400, period, phase, False)
+			asicsConfig2 = deepcopy(asicsConfig)
+			for ac in asicsConfig2.values():
+				gc = ac.globalConfig
+				gc.setValue("v_cal_ref_ig", amplitude)	# Set FETP amplitude
+				cc = ac.channelConfig[channel]
+				cc.setValue("fetp_en", 0b11)		# Enable FETP for channel
+				cc.setValue("trigger_mode_1", 0b00)	# Set channel to normal trigger mode
+			
+			daqd.setAsicsConfig(asicsConfig2)
+			sleep(0.1)
+			
+			print "Acquiring channel %2d" % channel
+			daqd.acquire(args.time, 0, 0)
 
 systemConfig.loadToHardware(daqd, bias_enable=config.APPLY_BIAS_OFF)
 daqd.setTestPulseNone()
