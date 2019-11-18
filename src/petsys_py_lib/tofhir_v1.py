@@ -262,6 +262,12 @@ class AsicChannelConfig(bitarray):
 		# Shortest metastability delay
 		self.setValue("metastability", 0b10)
 
+		# These settings seem to lead to the more consistent behaviour
+		self.setValue("reset_n2", 0b1)
+		self.setValue("stable2", 0b1)
+		self.setValue("qtx2", 0b1)
+		self.setValue("conv2", 0b1)
+
 		return None
 
 	def __deepcopy__(self, memo):
