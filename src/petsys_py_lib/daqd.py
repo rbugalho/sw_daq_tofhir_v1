@@ -817,43 +817,6 @@ class Connection:
 				if nTry >= 5:
 					raise e
 
-
-	def __buildAsicCommand(self, chipID, command, value=None, channel=None):
-		commandInfo = {
-		#	commandID 	: (code,   ch,   read, data length)
-			"wrChCfg"	: (0b0010, True, False, 130),
-			"rdChCfg"	: (0b0011, True, True, 130),
-			"wrGlobalCfg" 	: (0b0000, False, False, 222),
-			"rdGlobalCfg" 	: (0b0001, False, True, 222)
-		}
-	
-		commandCode, isChannel, isRead, dataLength = commandInfo[command]
-		
-		cfg_chip_id = bitarray("0000"); # For now, we only support chip address 0
-		cfg_command = bitarray_utils.intToBin(commandCode, 4)
-		
-		if isChannel:
-			cfg_channel_id = bitarray_utils.intToBin(channel, 4)
-		else:
-			cfg_channel_id = bitarray("0000")
-		
-		cfg_padding_1 = bitarray("0000")
-
-		cfg_payload = bitarray(28*8)
-		cfg_payload.setall(0)
-		if not isRead:
-			cfg_payload[224 - dataLength:224] = value[0:dataLength]
-		
-		
-		
-		composed_command = cfg_payload + cfg_padding_1 + cfg_channel_id + cfg_command + cfg_chip_id
-		
-		composed_command = composed_command.tobytes()
-		composed_command = bytearray([ 0x01, chipID ]) + composed_command
-		
-		return composed_command
-
-		
 	def ___doAsicCommand(self, portID, slaveID, chipID, command, value=None, channel=None):
 		commandInfo = {
 		#	commandID 	: (code,   ch,   read, data length)
