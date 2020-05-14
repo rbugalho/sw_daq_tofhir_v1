@@ -1,4 +1,5 @@
 #include <RawReader.hpp>
+#include <DAQv1Reader.hpp>
 #include <OverlappedEventHandler.hpp>
 #include <getopt.h>
 #include <assert.h>
@@ -183,6 +184,7 @@ void displayHelp(char * program)
 	fprintf(stderr,  "  -o \t\t\t Output file name - containins raw event data in ROOT format.\n");
 	fprintf(stderr, "Optional flags:\n");
 	fprintf(stderr,  "  --writeFraction N \t\t Fraction of events to write. Default: 100%.\n");
+	fprintf(stderr,  "  --daqv1 \t\t Parse DAQv1 data.\n");
 	fprintf(stderr,  "  --help \t\t Show this help message and exit \n");
 };
 
@@ -198,11 +200,13 @@ int main(int argc, char *argv[])
         char *inputFilePrefix = NULL;
 	char *outputFileName = NULL;
 	long long eventFractionToWrite = 1024;
+	int parser_type = 0;
     
         static struct option longOptions[] = {
                 { "help", no_argument, 0, 0 },
                 { "config", required_argument, 0, 0 },
-		{ "writeFraction", required_argument }
+		{ "writeFraction", required_argument },
+		{ "daqv1", no_argument, 0, 0 },
 		
         };
 
@@ -224,6 +228,7 @@ int main(int argc, char *argv[])
 			case 0:		displayHelp(argv[0]); exit(0); break;
                         case 1:		configFileName = optarg; break;
 			case 2:		eventFractionToWrite = round(1024 *boost::lexical_cast<float>(optarg) / 100.0); break;
+			case 3:		parser_type = 1; break;
 			default:	displayUsage(argv[0]); exit(1);
 			}
 		}
@@ -250,7 +255,11 @@ int main(int argc, char *argv[])
 	
 
 	
-	RawReader *reader = RawReader::openFile(inputFilePrefix);
+	AbstractRawReader *reader;
+	if (parser_type == 1)
+		reader = DAQv1Reader::openFile(inputFilePrefix);
+	else
+		reader = RawReader::openFile(inputFilePrefix);
 	
 	DataFileWriter *dataFileWriter = new DataFileWriter(outputFileName, FILE_ROOT, eventFractionToWrite);
 	

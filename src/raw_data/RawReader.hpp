@@ -2,12 +2,13 @@
 #define __PETSYS__RAW_READER_HPP__DEFINED__
 
 #include <EventSourceSink.hpp>
+#include <AbstractRawReader.hpp>
 #include <Event.hpp>
 
 #include <vector>
 
 namespace PETSYS {
-	class RawReader {
+	class RawReader : public AbstractRawReader {
 	public:
 		~RawReader();
 		static RawReader *openFile(const char *fnPrefix);
