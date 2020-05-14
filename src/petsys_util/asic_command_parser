@@ -3,21 +3,26 @@
 import sys
 import argparse
 import bitarray
-from petsys import tofhir_v1, bitarray_utils
+from petsys import config, tofhir_v1, bitarray_utils
 
 
 def main(argv):
 	
 	parser = argparse.ArgumentParser(description='Build/parse ASIC command/reply')
-	parser.add_argument("-f", type=str, dest="fileName", required=True, help="Command/reply file")
 	parser.add_argument("--command_type", required=True, choices=["clear", "global_write", "global_read", "channel_write", "channel_read"], help="Command type")
 	parser.add_argument("--mode", required=True, choices=["build", "parse"], help="Build a command or parse a replay")
 	parser.add_argument("--print_config", default=False, action="store_true", help="Print configuration")
 	parser.add_argument("--chip", type=int, help="Chip ID")
-	parser.add_argument("--bus", type=int, help="Bus ID")
-	parser.add_argument("--channel", default=0, type=int, help="Channel ID")
+	parser.add_argument("--channel", default=None, type=int, help="Channel ID")
+	parser.add_argument("--config", type=str, required=True, help="Configuration file")
+
 	
 	args = parser.parse_args()
+
+	asicsConfig = { None : tofhir_v1.AsicConfig() }
+	systemConfig = config.ConfigFromFile(args.config, loadMask=0x0)
+	systemConfig.applyConfigToAsics(asicsConfig)
+
 
 
 	if args.command_type == "global_write":
@@ -25,7 +30,7 @@ def main(argv):
 		register_length = 222			# Actual register length in bits
 		
 		cfg_class = tofhir_v1.AsicGlobalConfig
-		cfg_value = tofhir_v1.AsicGlobalConfig()	# Create a default configuration value
+		cfg_value = asicsConfig[None].globalConfig
 		# Modify the ASIC configuration as needed
 		cfg_value.setValue("tx_ddr", 1)			# Enable DDR transmission
 		cfg_value.setValue("tx_nlinks", 0)		# Use only one link (TX0) for transmission
@@ -40,7 +45,7 @@ def main(argv):
 		command_code = 0b0010
 		register_length = 130
 		cfg_class = tofhir_v1.AsicChannelConfig
-		cfg_value = tofhir_v1.AsicChannelConfig()
+		cfg_value = asicsConfig[None].channelConfig[0]
 		
 	else:
 		command_code = 0b0011
@@ -58,53 +63,21 @@ def main(argv):
 			composed_command = [ 0x00, 0x00 ] + [ 0x00 for n in range(30) ] 
 			composed_command = bytearray(composed_command)
 			
-			print "FPGA COMMAND: ", (", ").join([ "0x%02X" % v for v in composed_command ])
-			f = open(args.fileName, "w")
-			for v in composed_command:
-				f.write("%02X\n" % v)
-			f.close()
 			print "ASIC COMMAND: ", (", ").join(["...", "K28.5" ] + [ "K28.1" for v in composed_command[2: ] ] + [ "K28.5", "..."])
 			
 		
 		else:
-			assert args.bus != None, "--bus is required"
 			assert args.chip != None, "--chip is required"
 			if  args.command_type in [ "channel_write", "channel_read" ]:
 				assert args.channel != None, "--channel is required"
 			
 			
-			
-			if args.command_type == "global_write":
-				command_code = 0b0000			# Command ID
-				register_length = 222			# Actual register length in bits
-				
-				cfg_value = tofhir_v1.AsicGlobalConfig()	# Create a default configuration value
-				# Modify the ASIC configuration as needed
-				cfg_value.setValue("tx_ddr", 1)			# Enable DDR transmission
-				cfg_value.setValue("tx_nlinks", 0)		# Use only one link (TX0) for transmission
-
-			elif args.command_type == "global_read":
-				command_code = 0b0001
-				register_length = 222
-				cfg_value = None
-				
-			elif args.command_type == "channel_write":
-				command_code = 0b0010
-				register_length = 130
-				cfg_value = tofhir_v1.AsicChannelConfig()
-				
-			else:
-				command_code = 0b0011
-				register_length = 130
-				cfg_value = None
-				
-				
 
 			# The BTL FE v1 has 6 ASICs per configuration bus.
 			# Each ASIC on a bus is given a unique 4-bit ASIC ID and only reacts to commands with that ID
 			cfg_chip_id = bitarray_utils.intToBin(args.chip, 4)
-			# The sample FPGA configuration module allows for up to 256 different configuration bus
-			cfg_bus_id = args.bus				
+
+		
 
 			# 4-bit command code
 			cfg_command = bitarray_utils.intToBin(command_code, 4)
@@ -124,26 +97,20 @@ def main(argv):
 			composed_command = cfg_payload + cfg_padding_1 + cfg_channel_id + cfg_command + cfg_chip_id
 			composed_command = composed_command.tobytes()
 			
-			# Add the headers for the FPGA configuration module which specify
-			# normal command (0x01)
-			# which configuration bus
-			composed_command = bytearray([ 0x01, cfg_bus_id ]) + composed_command
-			
 			
 			# OK, this is it
 			if args.print_config and cfg_value != None:
 				print "CONFIG: ", cfg_value
 				cfg_value.printAllValues()
-				
-			print "FPGA COMMAND: ", (", ").join([ "0x%02X" % v for v in composed_command ])
-			f = open(args.fileName, "w")
-			for v in composed_command:
-				f.write("%02X\n" % v)
-			f.close()
-			print "ASIC COMMAND: ", (", ").join(["...", "K28.5" ] + [ "0x%02X" % v for v in composed_command[2: ] ] + ["0x51", "0xAF", "K28.1", "K28.5", "..."])
+
+			composed_command = bytearray(composed_command)
+			print "ASIC COMMAND: ", (", ").join(["...", "K28.5" ] + [ "0x%02X" % v for v in composed_command[0: ] ] + ["0x51", "0xAF", "K28.1", "K28.5", "..."])
 		
 		
 	else:
+		sys.stderr.write("The decoding mode is broken in this version of the script\n")
+		return 1
+
 		# Read the reply from the file
 		reply = []
 		f = open(args.fileName, "r")

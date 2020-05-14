@@ -97,6 +97,16 @@ class Config:
 		self.__hw_trigger = None
 
 
+	def applyConfigToAsics(self, asicsConfig):
+		# Apply ASIC parameters from file
+		for (gc, key), value in self.__asicParameterTable.items():
+			for ac in asicsConfig.values():
+				if gc == "global":
+					ac.globalConfig.setValue(key, value)
+				else:
+					for cc in ac.channelConfig:
+						cc.setValue(key, value)
+
 	def loadToHardware(self, daqd, bias_enable=APPLY_BIAS_OFF, hw_trigger_enable=False):
 		#
 		# Apply bias voltage settings
@@ -124,15 +134,16 @@ class Config:
 
 		
 		asicsConfig = daqd.getAsicsConfig()
+		self.applyConfigToAsics(asicsConfig)
 
-		# Apply ASIC parameters from file
-		for (gc, key), value in self.__asicParameterTable.items():
-			for ac in asicsConfig.values():
-				if gc == "global":
-					ac.globalConfig.setValue(key, value)
-				else:
-					for cc in ac.channelConfig:
-						cc.setValue(key, value)
+		## Apply ASIC parameters from file
+		#for (gc, key), value in self.__asicParameterTable.items():
+			#for ac in asicsConfig.values():
+				#if gc == "global":
+					#ac.globalConfig.setValue(key, value)
+				#else:
+					#for cc in ac.channelConfig:
+						#cc.setValue(key, value)
 
 		# Apply discriminator baseline calibrations
 		if (self.__loadMask & LOAD_DISC_CALIBRATION) != 0:
