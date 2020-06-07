@@ -21,7 +21,7 @@ class AsicGlobalConfig(bitarray):
 		self.__fields = {
 			"r_clk_en"	 : [2, 1, 0],
 			"tac_refresh_en"	 : [3],
-			"tac_refresh_period"	 : [7, 6, 4, 4],
+			"tac_refresh_period"	 : [7, 6, 5, 4],
 			"counter_en"	 : [8],
 			"counter_period"	 : [12, 11, 10, 9],
 			"tx_is_debug"	 : [13],
