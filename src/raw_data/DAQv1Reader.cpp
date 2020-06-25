@@ -75,6 +75,35 @@ void DAQv1Reader::getStepValue(int n, float &step1, float &step2)
 	step2 = 0;
 }
 
+static unsigned __int128 hex_to_u128(char *s)
+{
+
+	unsigned __int128 result = 0;
+	
+	for(int k = 0; k < strlen(s); k++) {
+		result = result << 4;
+		switch(toupper(s[k])) {
+			case '0': result |= 0x0; break;
+			case '1': result |= 0x1; break;
+			case '2': result |= 0x2; break;
+			case '3': result |= 0x3; break;
+			case '4': result |= 0x4; break;
+			case '5': result |= 0x5; break;
+			case '6': result |= 0x6; break;
+			case '7': result |= 0x7; break;
+			case '8': result |= 0x8; break;
+			case '9': result |= 0x9; break;
+			case 'A': result |= 0xA; break;
+			case 'B': result |= 0xB; break;
+			case 'C': result |= 0xC; break;
+			case 'D': result |= 0xD; break;
+			case 'E': result |= 0xE; break;
+			case 'F': result |= 0xF; break;
+			default: break;
+		}
+	}
+	return result;
+}
 
 
 void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
@@ -84,9 +113,12 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 	int nEvents = 0;
 	
 	RawDataFrame *dataFrame = new RawDataFrame;
-	EventBuffer<RawHit> *outBuffer = NULL; 
+
+	uint64_t first_rx_timetag = 0;
+	uint64_t outBufferMinTime = 0;
+	uint64_t outBufferMaxTime = 0;
 	const long outBlockSize = 4*1024;
-	long long currentBufferFirstFrame = 0;
+	EventBuffer<RawHit> *outBuffer = new EventBuffer<RawHit>(outBlockSize, outBufferMinTime);; 
 	
 	char *text_line = new char[256];
 	size_t text_length;
@@ -95,82 +127,69 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 		unsigned link;
 		unsigned elink;
 		unsigned event_number;
-		char word_hex[256];
-		int r = sscanf(text_line, "%u; %u; %u; 0x%[0-9a-f]L\n", &link, &elink, &event_number, word_hex);
+		char tt_hex[256];
+		char evt_hex[256];
+		int r = sscanf(text_line, "%u; %u; %u;0x%[0-9a-f]; 0x%[0-9a-f]L\n", &link, &elink, &event_number, tt_hex, evt_hex);
 //		fprintf(stderr, "r = %d\n", r);
- 		if (r != 4) continue;
+ 		if (r != 5) continue;
  		
-// 		fprintf(stderr, "%3d %3d %3d %4d, '%s'\n", link, elink, event_number, 4*strlen(word_hex), word_hex );
+// 		fprintf(stderr, "%3d %3d %3d %4d, '%s'\n", link, elink, event_number, 4*strlen(evt_hex), evt_hex );
 		
-		
-		// Convert HEX to unsigned __int128
-		unsigned __int128 word = 0;
-		for(int k = 0; k < strlen(word_hex); k++) {
-			word = word << 4;
-			switch(toupper(word_hex[k])) {
-			case '0': word |= 0x0; break;
-			case '1': word |= 0x1; break;
-			case '2': word |= 0x2; break;
-			case '3': word |= 0x3; break;
-			case '4': word |= 0x4; break;
-			case '5': word |= 0x5; break;
-			case '6': word |= 0x6; break;
-			case '7': word |= 0x7; break;
-			case '8': word |= 0x8; break;
-			case '9': word |= 0x9; break;
-			case 'A': word |= 0xA; break;
-			case 'B': word |= 0xB; break;
-			case 'C': word |= 0xC; break;
-			case 'D': word |= 0xD; break;
-			case 'E': word |= 0xE; break;
-			case 'F': word |= 0xF; break;
-			}
-		}
 
+		uint64_t rx_timetag = hex_to_u128(tt_hex);
+		unsigned __int128 evt = hex_to_u128(evt_hex);
 		
-		unsigned word_type = (word >> 86) & 0x3;
-		if(word_type != 0) {
-			// Not an event word
-			fprintf(stderr, "BAD  %3d %3d %3d '%22s'\n", link, elink, event_number, word_hex );
+		unsigned evt_type = (evt >> 86) & 0x3;
+		if(evt_type != 0) {
+			// Not an event evt
+			fprintf(stderr, "BAD  %3d %3d %3d '%22s'\n", link, elink, event_number, evt_hex );
 			continue;
 		}
 		
 		
-		if(outBuffer == NULL) {
-			currentBufferFirstFrame = dataFrame->getFrameID();
-			outBuffer = new EventBuffer<RawHit>(outBlockSize, currentBufferFirstFrame * 1024);
-			
-		}
-		else if(outBuffer->getSize() + 1 > outBlockSize) {
+		if((outBuffer->getSize() + 1 > outBlockSize) || ((outBufferMaxTime - outBufferMinTime) > 4503599627370496ULL)) {
 			sink->pushEvents(outBuffer);
-			currentBufferFirstFrame = dataFrame->getFrameID();
-			outBuffer = new EventBuffer<RawHit>(outBlockSize, currentBufferFirstFrame * 1024);
+			outBufferMinTime = outBufferMaxTime;
+			outBuffer = new EventBuffer<RawHit>(outBlockSize, outBufferMinTime);
 		}
 		
 		
 		RawHit &e = outBuffer->getWriteSlot();
-		// There is no frame ID
-		// For now lets create a fake frame ID from event_number
-		unsigned long long frameID = event_number << 4;
+		
+
+		// Construct an absolute timetag required for the software pipeline
+		if(first_rx_timetag == 0) first_rx_timetag = rx_timetag;
+		rx_timetag = rx_timetag - first_rx_timetag;
+
+		unsigned t1coarse = ((evt >> 66) & 0x7FFF);
+		uint64_t absoluteT1 = (rx_timetag & 0xFFFFFFFFFFFF8000ULL) | t1coarse;
+		// Correct wrap-around
+		if(absoluteT1 < rx_timetag) absoluteT1 += 0x10000;
+
+		uint64_t frameID = absoluteT1 >> 10;
 
 		e.frameID 	= frameID;
-		e.channelID	= (ELINK_MAP(elink) << 6) | ((word >> 0) % 16);
-		e.tacID		= ((word >> 4) % 4);
-		e.qfine		= ((word >> 6) % 1024);
-		e.t2fine	= ((word >> 16) % 1024);
-		e.t1fine	= ((word >> 26) % 1024);
-		e.idleTime	= ((word >> 36) % 1024);
-		e.qcoarse	= ((word >> 46) % 1024);
-		e.t2coarse	= ((word >> 56) % 1024);
-		e.t1coarse	= ((word >> 66) % 65536);
-		e.triggerBits	= ((word >> 82) % 16);
+		e.channelID	= (ELINK_MAP(elink) << 6) | ((evt >> 0) % 16);
+		e.tacID		= ((evt >> 4) % 4);
+		e.qfine		= ((evt >> 6) % 1024);
+		e.t2fine	= ((evt >> 16) % 1024);
+		e.t1fine	= ((evt >> 26) % 1024);
+		e.idleTime	= ((evt >> 36) % 1024);
+		e.qcoarse	= ((evt >> 46) % 1024);
+		e.t2coarse	= ((evt >> 56) % 1024);
+		e.t1coarse	= t1coarse;
+		e.triggerBits	= ((evt >> 82) % 16);
+
+		e.time = (absoluteT1 - outBufferMinTime);
+		e.timeEnd = e.time + e.qcoarse;
+		if((e.timeEnd - e.time) < -256) e.timeEnd += 1024;
+
+		if(absoluteT1 > outBufferMaxTime) outBufferMaxTime = absoluteT1;
 		
-		fprintf(stderr, "GOOD %3d %3d %3d '%22s'", link, elink, event_number, word_hex );
+		fprintf(stderr, "GOOD %3d %3d %3d '%22s'", link, elink, event_number, evt_hex );
+//		fprintf(stderr, ": %08llx -> %08llx", rx_timetag, absoluteT1);
 		fprintf(stderr, ": %2hu %2hu %1hu ; %6hu %4hu ; %4hu %4hu %4hu\n", elink, e.channelID % 16, e.tacID, e.t1coarse, e.t2coarse, e.t1fine, e.t2fine, e.qfine);
 		
-		e.time = (frameID - currentBufferFirstFrame) * 1024 + e.t1coarse;
-		e.timeEnd = (frameID - currentBufferFirstFrame) * 1024 + e.t2coarse;
-		if((e.timeEnd - e.time) < -256) e.timeEnd += 1024;
 		
 		e.valid = true;
 		
@@ -184,10 +203,8 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 	}
 	delete [] text_line;
 	
-	if(outBuffer != NULL) {
-		sink->pushEvents(outBuffer);
-		outBuffer = NULL;
-	}
+	sink->pushEvents(outBuffer);
+	outBuffer = NULL;
 	
 	sink->finish();
 	if(verbose) {
