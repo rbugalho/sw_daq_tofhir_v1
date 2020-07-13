@@ -181,7 +181,7 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 		e.triggerBits	= ((evt >> 82) % 16);
 
 		e.time = (absoluteT1 - outBufferMinTime);
-		e.timeEnd = e.time + e.qcoarse;
+		e.timeEnd = e.time + e.qcoarse - (e.t1coarse % 1024);
 		if((e.timeEnd - e.time) < -256) e.timeEnd += 1024;
 
 		if(absoluteT1 > outBufferMaxTime) outBufferMaxTime = absoluteT1;
