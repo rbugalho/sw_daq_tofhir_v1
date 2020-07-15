@@ -148,16 +148,6 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 			continue;
 		}
 		
-		
-		if((outBuffer->getSize() + 1 > outBlockSize) || ((outBufferMaxTime - outBufferMinTime) > 1099511627776ULL)) {
-			sink->pushEvents(outBuffer);
-			outBufferMinTime = outBufferMaxTime;
-			outBuffer = new EventBuffer<RawHit>(outBlockSize, outBufferMinTime);
-		}
-		
-		
-		RawHit &e = outBuffer->getWriteSlot();
-		
 
 		// This is the first event in the data
 		if(first_rx_timetag == 0) { 
@@ -175,13 +165,24 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 		last_rx_timetag = rx_timetag;
 
 		// Construct an absolute rx_timeag relative to the first rx_timetag in the data
-		uint64_t rx_timetag2 = rx_timetag + (rx_timetag_wraps * 0xFFFFFFFFFFFFFFFFULL) - first_rx_timetag;
+		uint64_t rx_timetag2 = rx_timetag + (rx_timetag_wraps * (1ULL<<44)) - first_rx_timetag;
 
-		// Construct an absolute event time ag
+		// Construct an absolute event time tag
 		unsigned t1coarse = ((evt >> 66) & 0x7FFF);
 		uint64_t absoluteT1 = (rx_timetag2 & 0xFFFFFFFFFFFF8000ULL) | t1coarse;
 		// Correct wrap-around of t1coarse
-		if(absoluteT1 < rx_timetag) absoluteT1 += 0x10000;
+		if(absoluteT1 < rx_timetag2) absoluteT1 += 0x10000;
+
+		if(absoluteT1 > outBufferMaxTime) outBufferMaxTime = absoluteT1;
+		outBuffer->setTMax(outBufferMaxTime);
+
+                if((outBuffer->getSize() + 1 > outBlockSize) || ((outBufferMaxTime - outBufferMinTime) > 1099511627776ULL)) {
+                        sink->pushEvents(outBuffer);
+                        outBufferMinTime = outBufferMaxTime;
+                        outBuffer = new EventBuffer<RawHit>(outBlockSize, outBufferMinTime);
+                }
+		RawHit &e = outBuffer->getWriteSlot();
+
 
 		// Match FEB/D data behaviour
 		// frameID is the most significant bits of the absolute time tag
@@ -196,24 +197,22 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 		e.idleTime	= ((evt >> 36) % 1024);
 		e.qcoarse	= ((evt >> 46) % 1024);
 		e.t2coarse	= ((evt >> 56) % 1024);
-		e.t1coarse	= (t1coarse % 1024);	// In FEB/D,  only the 10 least significant bits of t1coarse are carried here
+		e.t1coarse	= ((evt >> 66) % 1024);	// In FEB/D,  only the 10 least significant bits of t1coarse are carried here
 		e.triggerBits	= ((evt >> 82) % 16);
 
-		e.time = (absoluteT1 - outBufferMinTime);
-		e.timeEnd = e.time + e.t2coarse - e.t1coarse;
+		int64_t relTime = absoluteT1 - outBufferMinTime;
+		int64_t relTimeEnd = relTime + uint64_t(e.t2coarse) - uint64_t(e.t1coarse);
+		e.time = relTime;
+		e.timeEnd = relTimeEnd;
+		// Correct wrap around of e.t2coarse
 		if((e.timeEnd - e.time) < -256) e.timeEnd += 1024;
-
-
-		if(absoluteT1 > outBufferMaxTime) outBufferMaxTime = absoluteT1;
 		
 		fprintf(stderr, "GOOD %3d %3d %3d '%22s'", link, elink, event_number, evt_hex );
-		fprintf(stderr, ": %2hu %2hu %1hu ; %6hu %4hu ; %4hu %4hu %4hu\n", elink, e.channelID % 16, e.tacID, t1coarse, e.t2coarse, e.t1fine, e.t2fine, e.qfine);
+		fprintf(stderr, ": %2hu %2hu %1hu ; %6hu %4hu %4hu; %4hu %4hu %4hu\n", elink, e.channelID % 16, e.tacID, t1coarse % 1024, e.t2coarse, e.qcoarse, e.t1fine, e.t2fine, e.qfine);
 		e.valid = true;
-		
+
 		outBuffer->pushWriteSlot();
 		nEvents += 1;
-
-		outBuffer->setTMax((frameID + 1) * 1024);
 		
 		
 		
