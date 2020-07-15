@@ -115,6 +115,8 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 	RawDataFrame *dataFrame = new RawDataFrame;
 
 	uint64_t first_rx_timetag = 0;
+	uint64_t last_rx_timetag = 0;
+	uint64_t rx_timetag_wraps = 0;
 	uint64_t outBufferMinTime = 0;
 	uint64_t outBufferMaxTime = 0;
 	const long outBlockSize = 4*1024;
@@ -147,7 +149,7 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 		}
 		
 		
-		if((outBuffer->getSize() + 1 > outBlockSize) || ((outBufferMaxTime - outBufferMinTime) > 4503599627370496ULL)) {
+		if((outBuffer->getSize() + 1 > outBlockSize) || ((outBufferMaxTime - outBufferMinTime) > 1099511627776ULL)) {
 			sink->pushEvents(outBuffer);
 			outBufferMinTime = outBufferMaxTime;
 			outBuffer = new EventBuffer<RawHit>(outBlockSize, outBufferMinTime);
@@ -157,15 +159,32 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 		RawHit &e = outBuffer->getWriteSlot();
 		
 
-		// Construct an absolute timetag required for the software pipeline
-		if(first_rx_timetag == 0) first_rx_timetag = rx_timetag;
-		rx_timetag = rx_timetag - first_rx_timetag;
+		// This is the first event in the data
+		if(first_rx_timetag == 0) { 
+			first_rx_timetag = rx_timetag;
+			last_rx_timetag = rx_timetag;
+			rx_timetag_wraps = 0;
+		}
 
+		// Detect wrap around of rx_timetag
+		// TODO: rx_timetag may also be reset but there's no other way to handle it
+		// so we treat it as a wrap around
+		if(rx_timetag < last_rx_timetag) {
+			rx_timetag_wraps += 1;
+		}
+		last_rx_timetag = rx_timetag;
+
+		// Construct an absolute rx_timeag relative to the first rx_timetag in the data
+		uint64_t rx_timetag2 = rx_timetag + (rx_timetag_wraps * 0xFFFFFFFFFFFFFFFFULL) - first_rx_timetag;
+
+		// Construct an absolute event time ag
 		unsigned t1coarse = ((evt >> 66) & 0x7FFF);
-		uint64_t absoluteT1 = (rx_timetag & 0xFFFFFFFFFFFF8000ULL) | t1coarse;
-		// Correct wrap-around
+		uint64_t absoluteT1 = (rx_timetag2 & 0xFFFFFFFFFFFF8000ULL) | t1coarse;
+		// Correct wrap-around of t1coarse
 		if(absoluteT1 < rx_timetag) absoluteT1 += 0x10000;
 
+		// Match FEB/D data behaviour
+		// frameID is the most significant bits of the absolute time tag
 		uint64_t frameID = absoluteT1 >> 10;
 
 		e.frameID 	= frameID;
@@ -177,20 +196,18 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 		e.idleTime	= ((evt >> 36) % 1024);
 		e.qcoarse	= ((evt >> 46) % 1024);
 		e.t2coarse	= ((evt >> 56) % 1024);
-		e.t1coarse	= t1coarse;
+		e.t1coarse	= (t1coarse % 1024);	// In FEB/D,  only the 10 least significant bits of t1coarse are carried here
 		e.triggerBits	= ((evt >> 82) % 16);
 
 		e.time = (absoluteT1 - outBufferMinTime);
-		e.timeEnd = e.time + e.qcoarse - (e.t1coarse % 1024);
+		e.timeEnd = e.time + e.t2coarse - e.t1coarse;
 		if((e.timeEnd - e.time) < -256) e.timeEnd += 1024;
+
 
 		if(absoluteT1 > outBufferMaxTime) outBufferMaxTime = absoluteT1;
 		
 		fprintf(stderr, "GOOD %3d %3d %3d '%22s'", link, elink, event_number, evt_hex );
-//		fprintf(stderr, ": %08llx -> %08llx", rx_timetag, absoluteT1);
-		fprintf(stderr, ": %2hu %2hu %1hu ; %6hu %4hu ; %4hu %4hu %4hu\n", elink, e.channelID % 16, e.tacID, e.t1coarse, e.t2coarse, e.t1fine, e.t2fine, e.qfine);
-		
-		
+		fprintf(stderr, ": %2hu %2hu %1hu ; %6hu %4hu ; %4hu %4hu %4hu\n", elink, e.channelID % 16, e.tacID, t1coarse, e.t2coarse, e.t1fine, e.t2fine, e.qfine);
 		e.valid = true;
 		
 		outBuffer->pushWriteSlot();
