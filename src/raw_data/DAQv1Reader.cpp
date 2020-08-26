@@ -19,12 +19,12 @@ using namespace PETSYS;
 static unsigned ELINK_MAP(unsigned n)
 {
 	switch (n) {
-		case 15: return 0;
-		case 16: return 1;
-		case 17: return 2;
-		case 18: return 3;
-		case 19: return 4;
-		case 20: return 5;
+		case 15: return 5;
+		case 16: return 4;
+		case 17: return 3;
+		case 18: return 2;
+		case 19: return 1;
+		case 20: return 0;
 		default: return -1;
 	}
 }
