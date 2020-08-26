@@ -210,8 +210,8 @@ void RawReader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 			e.t1fine	= eventWord.getT1Fine();
 			e.t2coarse	= eventWord.getT2Coarse();
 			e.t2fine	= eventWord.getT2Fine();
-			e.qcoarse	= eventWord.getT1Coarse();
-			e.qfine		= eventWord.getT1Fine();
+			e.qcoarse	= eventWord.getQCoarse();
+			e.qfine		= eventWord.getQFine();
 			e.triggerBits	= eventWord.getTriggerBits();
 			e.idleTime	= eventWord.getIdleTime();
 			//fprintf(stderr, "DEBUG %hu %hu %hu\n", e.t1coarse, e.t2coarse, e.qcoarse);

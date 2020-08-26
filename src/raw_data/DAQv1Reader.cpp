@@ -114,6 +114,7 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 	
 	RawDataFrame *dataFrame = new RawDataFrame;
 
+	uint64_t first_elink_id = 0;
 	uint64_t first_rx_timetag = 0;
 	uint64_t last_rx_timetag = 0;
 	uint64_t rx_timetag_wraps = 0;
@@ -150,22 +151,27 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 		
 
 		// This is the first event in the data
-		if(first_rx_timetag == 0) { 
+		if(first_rx_timetag == 0) {
+			first_elink_id = elink;
 			first_rx_timetag = rx_timetag;
 			last_rx_timetag = rx_timetag;
 			rx_timetag_wraps = 0;
 		}
 
+		unsigned long long timetag_period = 1ULL<<44;
+		unsigned long long timetag_half_period = timetag_period / 2;
 		// Detect wrap around of rx_timetag
 		// TODO: rx_timetag may also be reset but there's no other way to handle it
 		// so we treat it as a wrap around
-		if(rx_timetag < last_rx_timetag) {
+		// WARNING: Data comes batched by elink and thus a single wrap could be detected multiple times
+		// Only data from the elink of the first event is considered for timetag wrap-around detection
+		if((elink == first_elink_id) && (rx_timetag & timetag_half_period) < (last_rx_timetag & timetag_half_period)) {
 			rx_timetag_wraps += 1;
 		}
 		last_rx_timetag = rx_timetag;
 
 		// Construct an absolute rx_timeag relative to the first rx_timetag in the data
-		uint64_t rx_timetag2 = rx_timetag + (rx_timetag_wraps * (1ULL<<44)) - first_rx_timetag;
+		uint64_t rx_timetag2 = rx_timetag + rx_timetag_wraps * timetag_period - first_rx_timetag;
 
 		// Construct an absolute event time tag
 		unsigned t1coarse = ((evt >> 66) & 0x7FFF);
@@ -207,7 +213,8 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 		// Correct wrap around of e.t2coarse
 		if((e.timeEnd - e.time) < -256) e.timeEnd += 1024;
 		
-		fprintf(stderr, "GOOD %3d %3d %3d '%22s'", link, elink, event_number, evt_hex );
+		fprintf(stderr, "GOOD %3d %3d %3d '%24s'", link, elink, event_number, evt_hex );
+		fprintf(stderr, ": %11s %5hu -> %12lld", tt_hex, t1coarse, absoluteT1);
 		fprintf(stderr, ": %2hu %2hu %1hu ; %6hu %4hu %4hu; %4hu %4hu %4hu\n", elink, e.channelID % 16, e.tacID, t1coarse % 1024, e.t2coarse, e.qcoarse, e.t1fine, e.t2fine, e.qfine);
 		e.valid = true;
 
