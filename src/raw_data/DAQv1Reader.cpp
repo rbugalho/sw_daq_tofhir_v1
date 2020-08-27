@@ -15,10 +15,15 @@
 using namespace std;
 using namespace PETSYS;
 
-
 static unsigned ELINK_MAP(unsigned n)
 {
 	switch (n) {
+		case  9: return 5;
+		case 10: return 4;
+		case 11: return 3;
+		case 12: return 2;
+		case 13: return 1;
+		case 14: return 0;
 		case 15: return 5;
 		case 16: return 4;
 		case 17: return 3;
@@ -148,6 +153,9 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 			fprintf(stderr, "BAD  %3d %3d %3d '%22s'\n", link, elink, event_number, evt_hex );
 			continue;
 		}
+
+		// We don't know this ELINK ID
+		if(ELINK_MAP(elink) == -1) continue;
 		
 
 		// This is the first event in the data
