@@ -170,8 +170,8 @@ public:
 				brToT = (hit.timeEnd - hit.time) * Tps;
 				brEnergy = hit.energy * Eunit;
 				brTacID = hit.raw->tacID;
-				brTQT = hit.raw->time - hit.time;
-				brTQE = (hit.raw->timeEnd - hit.timeEnd);
+				brTQT = hit.qT1;
+				brTQE = hit.qT2;
 				brX = hit.x;
 				brY = hit.y;
 				brZ = hit.z;

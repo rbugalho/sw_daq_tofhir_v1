@@ -57,6 +57,7 @@ EventBuffer<Hit> * ProcessHit::handleEvents (EventBuffer<RawHit> *inBuffer)
 			
 			float q_T = ( -ct.a1 + sqrtf((ct.a1 * ct.a1) - (4.0f * (ct.a0 - tfine) * ct.a2))) / (2.0f * ct.a2) ;
 			out.time = in.time - q_T - ct.t0;
+			out.qT1 = q_T;
 			if(ct.a1 == 0) eventFlags |= 0x2;
 		}
 		
@@ -65,6 +66,7 @@ EventBuffer<Hit> * ProcessHit::handleEvents (EventBuffer<RawHit> *inBuffer)
 			unsigned short tfine = remapADC(in.t2fine);
 			float q_E = ( -ce.a1 + sqrtf((ce.a1 * ce.a1) - (4.0f * (ce.a0 - tfine) * ce.a2))) / (2.0f * ce.a2) ;
 			out.timeEnd = in.timeEnd - q_E - ce.t0;
+			out.qT2 = q_E;
 			if(ce.a1 == 0) eventFlags |= 0x2;
 		}
 		out.energy = out.timeEnd - out.time;
