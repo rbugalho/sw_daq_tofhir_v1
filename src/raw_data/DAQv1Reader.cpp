@@ -34,6 +34,10 @@ static unsigned ELINK_MAP(unsigned n)
 	}
 }
 
+static const unsigned long long timetag_period = 1ULL<<32;
+static const unsigned long long timetag_half_period = timetag_period / 2;
+
+
 DAQv1Reader::DAQv1Reader() :
 	dataFile(NULL)
 
@@ -45,7 +49,7 @@ DAQv1Reader::~DAQv1Reader()
 	fclose(dataFile);
 }
 
-DAQv1Reader *DAQv1Reader::openFile(const char *fName)
+DAQv1Reader *DAQv1Reader::openFile(const char *fName, FILE *decoder_log)
 {
 	FILE * rawFile = fopen(fName, "r");
 	if(rawFile == NULL) {
@@ -55,6 +59,7 @@ DAQv1Reader *DAQv1Reader::openFile(const char *fName)
 
 	DAQv1Reader *reader = new DAQv1Reader();
 	reader->dataFile = rawFile;
+	reader->decoder_log = decoder_log;
 
 	return reader;
 }
@@ -131,33 +136,33 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 	char *text_line = new char[256];
 	size_t text_length;
 	while(getline(&text_line, &text_length, dataFile) > 0) {
-//		fprintf(stderr, "line = '%s'\n", text_line);
+//		fprintf(decoder_log, "line = '%s'\n", text_line);
 		unsigned link;
 		unsigned elink;
 		unsigned event_number;
 		char tt_hex[256];
 		char evt_hex[256];
 		int r = sscanf(text_line, "%u; %u; %u;0x%[0-9a-f]; 0x%[0-9a-f]L\n", &link, &elink, &event_number, tt_hex, evt_hex);
-//		fprintf(stderr, "r = %d\n", r);
+//		fprintf(decoder_log, "r = %d\n", r);
  		if (r != 5) continue;
  		
-// 		fprintf(stderr, "%3d %3d %3d %4d, '%s'\n", link, elink, event_number, 4*strlen(evt_hex), evt_hex );
+// 		fprintf(decoder_log, "%3d %3d %3d %4d, '%s'\n", link, elink, event_number, 4*strlen(evt_hex), evt_hex );
 		
 
-		uint64_t rx_timetag = hex_to_u128(tt_hex);
+		uint64_t rx_timetag = hex_to_u128(tt_hex) % timetag_period;
 		unsigned __int128 evt = hex_to_u128(evt_hex);
 		
 		unsigned evt_type = (evt >> 86) & 0x3;
+		fprintf(decoder_log, "%3d %3d %3d '%12s' '%32s'", link, elink, event_number, tt_hex, evt_hex);
+		
 		if(evt_type != 0) {
-			// Not an event evt
-			fprintf(stderr, "BAD  %3d %3d %3d '%22s'\n", link, elink, event_number, evt_hex );
+			fprintf(decoder_log, " BAD\n");
 			continue;
 		}
 
 		// We don't know this ELINK ID
 		if(ELINK_MAP(elink) == -1) continue;
 		
-
 		// This is the first event in the data
 		if(first_rx_timetag == 0) {
 			first_elink_id = elink;
@@ -165,9 +170,6 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 			last_rx_timetag = rx_timetag;
 			rx_timetag_wraps = 0;
 		}
-
-		unsigned long long timetag_period = 1ULL<<44;
-		unsigned long long timetag_half_period = timetag_period / 2;
 		// Detect wrap around of rx_timetag
 		// TODO: rx_timetag may also be reset but there's no other way to handle it
 		// so we treat it as a wrap around
@@ -221,9 +223,12 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 		// Correct wrap around of e.t2coarse
 		if((e.timeEnd - e.time) < -256) e.timeEnd += 1024;
 		
-		fprintf(stderr, "GOOD %3d %3d %3d '%24s'", link, elink, event_number, evt_hex );
-		fprintf(stderr, ": %11s %5hu -> %12lld", tt_hex, t1coarse, absoluteT1);
-		fprintf(stderr, ": %2hu %2hu %1hu ; %6hu %4hu %4hu; %4hu %4hu %4hu\n", elink, e.channelID % 16, e.tacID, t1coarse % 1024, e.t2coarse, e.qcoarse, e.t1fine, e.t2fine, e.qfine);
+		fprintf(decoder_log, " GOOD ");
+		fprintf(decoder_log, ": %14llu %4llu %14llu %5hu %20llu %15.12g", rx_timetag, rx_timetag_wraps, rx_timetag2, t1coarse, absoluteT1, absoluteT1 / getFrequency() );
+		fprintf(decoder_log, ": %2hu %2hu %1hu : %6hu %4hu %4hu; %4hu %4hu %4hu", e.channelID / 16, e.channelID % 16, e.tacID, t1coarse % 1024, e.t2coarse, e.qcoarse, e.t1fine, e.t2fine, e.qfine);
+		
+		fprintf(decoder_log, "\n");
+		//fprintf(decoder_log, ": %2hu %2hu %1hu ; %6hu %4hu %4hu; %4hu %4hu %4hu\n", elink, e.channelID % 16, e.tacID, t1coarse % 1024, e.t2coarse, e.qcoarse, e.t1fine, e.t2fine, e.qfine);
 		e.valid = true;
 
 		outBuffer->pushWriteSlot();

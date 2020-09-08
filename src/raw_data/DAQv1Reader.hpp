@@ -12,7 +12,7 @@ namespace PETSYS {
 	class DAQv1Reader : public AbstractRawReader {
 	public:
 		~DAQv1Reader();
-		static DAQv1Reader *openFile(const char *fnPrefix);
+		static DAQv1Reader *openFile(const char *fnPrefix, FILE *decoder_log = NULL);
 
 		bool isQDC();
 		double getFrequency();
@@ -26,6 +26,7 @@ namespace PETSYS {
 		void processRange(unsigned long begin, unsigned long end, bool verbose, EventSink<RawHit> *pipeline);
 
 		FILE * dataFile;
+		FILE * decoder_log;
 
 		
 	};

@@ -185,6 +185,7 @@ void displayHelp(char * program)
 	fprintf(stderr, "Optional flags:\n");
 	fprintf(stderr,  "  --writeFraction N \t\t Fraction of events to write. Default: 100%.\n");
 	fprintf(stderr,  "  --daqv1 \t\t Parse DAQv1 data.\n");
+	fprintf(stderr,  "  --decoder-log file_name \t\t Write decoding log information into file_name.\n");
 	fprintf(stderr,  "  --help \t\t Show this help message and exit \n");
 };
 
@@ -201,12 +202,14 @@ int main(int argc, char *argv[])
 	char *outputFileName = NULL;
 	long long eventFractionToWrite = 1024;
 	int parser_type = 0;
+	char *decoder_log_name = NULL;
     
         static struct option longOptions[] = {
                 { "help", no_argument, 0, 0 },
                 { "config", required_argument, 0, 0 },
 		{ "writeFraction", required_argument },
 		{ "daqv1", no_argument, 0, 0 },
+		{ "decoder-log", required_argument },
 		
         };
 
@@ -229,6 +232,7 @@ int main(int argc, char *argv[])
                         case 1:		configFileName = optarg; break;
 			case 2:		eventFractionToWrite = round(1024 *boost::lexical_cast<float>(optarg) / 100.0); break;
 			case 3:		parser_type = 1; break;
+			case 4:		decoder_log_name = optarg; break;
 			default:	displayUsage(argv[0]); exit(1);
 			}
 		}
@@ -253,11 +257,19 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 	
+	FILE *decoder_log_file = NULL;
+	if(decoder_log_name != NULL) {
+		decoder_log_file = fopen(decoder_log_name, "w");
+		if(decoder_log_file == NULL) {
+			fprintf(stderr, "Could not open '%s% for writing (%d)\n", decoder_log_name, errno);
+			exit(1);
+		}
+	}
 
 	
 	AbstractRawReader *reader;
 	if (parser_type == 1)
-		reader = DAQv1Reader::openFile(inputFilePrefix);
+		reader = DAQv1Reader::openFile(inputFilePrefix, decoder_log_file);
 	else
 		reader = RawReader::openFile(inputFilePrefix);
 	
@@ -278,6 +290,9 @@ int main(int argc, char *argv[])
 
 	delete dataFileWriter;
 	delete reader;
+	
+	if(decoder_log_file != NULL)
+		fclose(decoder_log_file);
 
 	return 0;
 }
