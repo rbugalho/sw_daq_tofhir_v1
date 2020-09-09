@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <assert.h>
 #include <ctype.h>
+#include <fstream>
 
 
 using namespace std;
