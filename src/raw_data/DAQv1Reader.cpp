@@ -85,6 +85,28 @@ void DAQv1Reader::getStepValue(int n, float &step1, float &step2)
 	step2 = 0;
 }
 
+void DAQv1Reader::readThrValues(char* inputFilePrefix, float& step1, float& step2)
+{
+  std::string inputFilePrefixString(inputFilePrefix);
+  std::size_t lastindex = inputFilePrefixString.find_last_of(".");
+  std::string rawname = inputFilePrefixString.substr(0, lastindex);
+  rawname += ".txt";
+  std::ifstream inFile(rawname.c_str());
+
+  float vth1, vth2, vthe;
+  while (true) {
+    inFile >> vth1 >> vth2 >> vthe;
+    if(inFile.eof())
+      {
+        break;
+      }
+  }
+
+  step1=vth1;
+  step2=vth2;
+  return;
+}
+
 static unsigned __int128 hex_to_u128(char *s)
 {
 

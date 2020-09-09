@@ -6,7 +6,7 @@ import bitarray
 from petsys import config, tofhir_v1, bitarray_utils
 
 
-def build_command(command_type, chipID, channelID, asicsConfig, print_flags):
+def build_command(command_type, chipID, channelID, asicsConfig, print_flags, vth1, vth2, vthe):
 	if command_type == "global_write":
 		command_code = 0b0000			# Command ID
 		register_length = 222			# Actual register length in bits
@@ -28,6 +28,12 @@ def build_command(command_type, chipID, channelID, asicsConfig, print_flags):
 		register_length = 130
 		cfg_class = tofhir_v1.AsicChannelConfig
 		cfg_value = asicsConfig[None].channelConfig[0]
+                if vth1 is not None:
+                        cfg_value.setValue("vth_t1", int(vth1))
+                if vth2 is not None:
+                        cfg_value.setValue("vth_t2", int(vth2))
+                if vthe is not None:
+                        cfg_value.setValue("vth_e", int(vthe))
 		
 	else:
 		command_code = 0b0011
@@ -108,6 +114,9 @@ def main(argv):
 	parser.add_argument("--chip", default=0, type=int, help="Chip ID")
 	parser.add_argument("--channel", default=0, type=int, help="Channel ID")
 	parser.add_argument("--config", type=str, required=True, help="Configuration file")
+        parser.add_argument("--vth1", type=str, dest="vth1", required=False, help="vth1 value")
+        parser.add_argument("--vth2", type=str, dest="vth2", required=False, help="vth2 value")
+        parser.add_argument("--vthe", type=str, dest="vthe", required=False, help="vthe value")
 	args = parser.parse_args()
 
 	
@@ -130,12 +139,12 @@ def main(argv):
 			systemConfig.applyConfigToAsics(asicsConfig)
 
 			if args.command_type == "global_write":
-				build_command("global_write", args.chip, args.channel, asicsConfig, args.pf)
+				build_command("global_write", args.chip, args.channel, asicsConfig, args.pf, args.vth1, args.vth2, args.vthe)
 			elif args.command_type == "channel_write":
-				build_command("channel_write", args.chip, args.channel, asicsConfig, args.pf)
+				build_command("channel_write", args.chip, args.channel, asicsConfig, args.pf, args.vth1, args.vth2, args.vthe)
 			else:
-				build_command("global_write", args.chip, args.channel, asicsConfig, args.pf)
-				build_command("channel_write", args.chip, args.channel, asicsConfig, args.pf)
+				build_command("global_write", args.chip, args.channel, asicsConfig, args.pf, args.vth1, args.vth2, args.vthe)
+				build_command("channel_write", args.chip, args.channel, asicsConfig, args.pf, args.vth1, args.vth2, args.vthe)
 	
 		
 	else:
