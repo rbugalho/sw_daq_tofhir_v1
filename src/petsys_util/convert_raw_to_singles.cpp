@@ -320,21 +320,37 @@ int main(int argc, char *argv[])
 	
 	DataFileWriter *dataFileWriter = new DataFileWriter(outputFileName, reader->getFrequency(),  fileType, reader->isQDC(), eventFractionToWrite);
 	
-	for(int stepIndex = 0; stepIndex < reader->getNSteps(); stepIndex++) {
+	if( parser_type == 1 ) {
 		float step1, step2;
-		reader->getStepValue(stepIndex, step1, step2);
-		printf("Processing step %d of %d: (%f, %f)\n", stepIndex+1, reader->getNSteps(), step1, step2);
+		reader->readThrValues(inputFilePrefix, step2, step1);
+		printf("Processing step: (%f, %f)\n", step1, step2);
 		
-		reader->processStep(stepIndex, true,
-				new CoarseSorter(
-				new ProcessHit(config, reader->isQDC(),
-				new WriteHelper(dataFileWriter, step1, step2,
-				new NullSink<Hit>()
-				))));
+		reader->processStep(0, true,
+			new CoarseSorter(
+			new ProcessHit(config, reader->isQDC(),
+			new WriteHelper(dataFileWriter, step1, step2,
+			new NullSink<Hit>()
+			))));
 		
 		dataFileWriter->closeStep(step1, step2);
+	}	
+	else {
+		for(int stepIndex = 0; stepIndex < reader->getNSteps(); stepIndex++) {
+			float step1, step2;
+			reader->getStepValue(stepIndex, step1, step2);
+			printf("Processing step %d of %d: (%f, %f)\n", stepIndex+1, reader->getNSteps(), step1, step2);
+			
+			reader->processStep(stepIndex, true,
+					new CoarseSorter(
+					new ProcessHit(config, reader->isQDC(),
+					new WriteHelper(dataFileWriter, step1, step2,
+					new NullSink<Hit>()
+					))));
+			
+			dataFileWriter->closeStep(step1, step2);
+		}
 	}
-
+	
 	delete dataFileWriter;
 	delete reader;
 

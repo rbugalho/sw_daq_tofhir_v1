@@ -55,6 +55,7 @@ configure_file("src/petsys_util/process_threshold_calibration" "process_threshol
 configure_file("src/petsys_util/make_fake_disc_calibration_table" "make_fake_disc_calibration_table" COPYONLY)
 configure_file("src/petsys_util/acquire_qdc_calibration" "acquire_qdc_calibration" COPYONLY)
 configure_file("src/petsys_util/acquire_sipm_data" "acquire_sipm_data" COPYONLY)
+configure_file("src/petsys_util/acquire_daq_data" "acquire_daq_data" COPYONLY)
 configure_file("src/petsys_util/make_bias_calibration_table" "make_bias_calibration_table" COPYONLY)
 configure_file("src/petsys_util/make_simple_bias_settings_table" "make_simple_bias_settings_table" COPYONLY)
 configure_file("src/petsys_util/make_simple_channel_map" "make_simple_channel_map" COPYONLY)
@@ -102,6 +103,9 @@ target_link_libraries("convert_raw_to_coincidence" common)
 
 add_executable("convert_raw_to_singles" "src/petsys_util/convert_raw_to_singles.cpp" )
 target_link_libraries("convert_raw_to_singles" common)
+
+add_executable("convert_raw_to_trigger" "src/petsys_util/convert_raw_to_trigger.cpp" )
+target_link_libraries("convert_raw_to_trigger" common)
 # 
 add_executable("convert_raw_to_singles_for_sebastian.cpp" "src/petsys_util/convert_raw_to_singles_for_sebastian.cpp" )
 target_link_libraries("convert_raw_to_singles_for_sebastian.cpp" common)

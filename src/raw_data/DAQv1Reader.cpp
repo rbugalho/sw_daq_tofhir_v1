@@ -10,6 +10,8 @@
 #include <fcntl.h>
 #include <assert.h>
 #include <ctype.h>
+#include <fstream>
+#include <iostream>
 
 
 using namespace std;
@@ -85,6 +87,28 @@ void DAQv1Reader::getStepValue(int n, float &step1, float &step2)
 	step2 = 0;
 }
 
+void DAQv1Reader::readThrValues(char* inputFilePrefix, float& step1, float& step2)
+{
+  std::string inputFilePrefixString(inputFilePrefix);
+  std::size_t lastindex = inputFilePrefixString.find_last_of(".");
+  std::string rawname = inputFilePrefixString.substr(0, lastindex);
+  rawname += ".txt";
+  std::ifstream inFile(rawname.c_str());
+
+  float vth1, vth2, vthe;
+  while (true) {
+    inFile >> vth1 >> vth2 >> vthe;
+    if(inFile.eof())
+      {
+        break;
+      }
+  }
+
+  step1=vth1;
+  step2=vth2;
+  return;
+}
+
 static unsigned __int128 hex_to_u128(char *s)
 {
 
@@ -136,7 +160,7 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 	char *text_line = new char[256];
 	size_t text_length;
 	while(getline(&text_line, &text_length, dataFile) > 0) {
-//		fprintf(decoder_log, "line = '%s'\n", text_line);
+//		if( decoder_log ) fprintf(decoder_log, "line = '%s'\n", text_line);
 		unsigned link;
 		unsigned elink;
 		unsigned event_number;
@@ -158,7 +182,6 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 
 		// We don't know this ELINK ID
 		if(ELINK_MAP(elink) == -1) continue;
-		
 		// This is the first event in the data
 		if(first_rx_timetag == 0) {
 			first_elink_id = elink;
@@ -194,8 +217,7 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
                         outBuffer = new EventBuffer<RawHit>(outBlockSize, outBufferMinTime);
                 }
 		RawHit &e = outBuffer->getWriteSlot();
-
-
+		
 		// Match FEB/D data behaviour
 		// frameID is the most significant bits of the absolute time tag
 		uint64_t frameID = absoluteT1 >> 10;
@@ -225,7 +247,6 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 			fprintf(decoder_log, ": %2hu %2hu %1hu : %6hu %4hu %4hu; %4hu %4hu %4hu", e.channelID / 16, e.channelID % 16, e.tacID, t1coarse % 1024, e.t2coarse, e.qcoarse, e.t1fine, e.t2fine, e.qfine);			
 			fprintf(decoder_log, "\n");
 		}
-		//fprintf(decoder_log, ": %2hu %2hu %1hu ; %6hu %4hu %4hu; %4hu %4hu %4hu\n", elink, e.channelID % 16, e.tacID, t1coarse % 1024, e.t2coarse, e.qcoarse, e.t1fine, e.t2fine, e.qfine);
 		e.valid = true;
 
 		outBuffer->pushWriteSlot();
