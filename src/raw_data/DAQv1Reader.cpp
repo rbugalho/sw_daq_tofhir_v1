@@ -148,10 +148,10 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 	
 	RawDataFrame *dataFrame = new RawDataFrame;
 
-	uint64_t first_elink_id = 0;
-	uint64_t first_rx_timetag = 0;
-	uint64_t last_rx_timetag = 0;
-	uint64_t rx_timetag_wraps = 0;
+	int64_t first_elink_id = -1;
+	int64_t first_rx_timetag = 0;
+	int64_t last_rx_timetag = 0;
+	int64_t rx_timetag_wraps = 0;
 	uint64_t outBufferMinTime = 0;
 	uint64_t outBufferMaxTime = 0;
 	const long outBlockSize = 4*1024;
@@ -181,21 +181,26 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 		}
 
 		// We don't know this ELINK ID
-		if(ELINK_MAP(elink) == -1) continue;
-		// This is the first event in the data
-		if(first_rx_timetag == 0) {
-			first_elink_id = elink;
-			first_rx_timetag = rx_timetag;
-			last_rx_timetag = rx_timetag;
-			rx_timetag_wraps = 0;
+		if(ELINK_MAP(elink) == -1) {
+			if(decoder_log != NULL) fprintf(decoder_log, " UNKNOWN ELINK\n");
+			continue;
 		}
+
 		// Detect wrap around of rx_timetag
 		// TODO: rx_timetag may also be reset but there's no other way to handle it
 		// so we treat it as a wrap around
 		// WARNING: Data comes batched by elink and thus a single wrap could be detected multiple times
 		// Only data from the elink of the first event is considered for timetag wrap-around detection
 		bool wraparound = false;
-		if(elink == first_elink_id) {
+		int64_t  elink_id2 = (link << 8) | elink;
+		if(first_elink_id == -1) {
+			// This is the first event in the data
+			first_elink_id = elink_id2;
+			first_rx_timetag = rx_timetag;
+			last_rx_timetag = rx_timetag;
+			rx_timetag_wraps = 0;
+		}
+		else if(elink_id2 == first_elink_id) {
 			if((rx_timetag & timetag_half_period) < (last_rx_timetag & timetag_half_period)) {
 				rx_timetag_wraps += 1;
 				wraparound = true;
@@ -204,11 +209,11 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 		}
 
 		// Construct an absolute rx_timeag relative to the first rx_timetag in the data
-		uint64_t rx_timetag2 = rx_timetag + rx_timetag_wraps * timetag_period - first_rx_timetag;
+		int64_t rx_timetag2 = rx_timetag + rx_timetag_wraps * timetag_period - first_rx_timetag;
 
 		// Construct an absolute event time tag
 		unsigned t1coarse = ((evt >> 66) & 0x7FFF);
-		uint64_t absoluteT1 = (rx_timetag2 & 0xFFFFFFFFFFFF8000ULL) | t1coarse;
+		int64_t absoluteT1 = (rx_timetag2 & 0xFFFFFFFFFFFF8000ULL) | t1coarse;
 		// Correct wrap-around of t1coarse
 		if(absoluteT1 < rx_timetag2) absoluteT1 += 0x10000;
 
@@ -247,7 +252,7 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 		
 		if(decoder_log != NULL) {
 			fprintf(decoder_log, " GOOD ");
-			fprintf(decoder_log, ": %14llu %4llu%c %14llu %5hu %20llu %15.12g", rx_timetag, rx_timetag_wraps, wraparound ? 'W' : ' ', rx_timetag2, t1coarse, absoluteT1, absoluteT1 / getFrequency() );
+			fprintf(decoder_log, ": %14lld %4lld%c %14lld %5hu %20lld %15.12g", rx_timetag, rx_timetag_wraps, wraparound ? 'W' : ' ', rx_timetag2, t1coarse, absoluteT1, absoluteT1 / getFrequency() );
 			fprintf(decoder_log, ": %2hu %2hu %1hu : %6hu %4hu %4hu; %4hu %4hu %4hu", e.channelID / 16, e.channelID % 16, e.tacID, t1coarse % 1024, e.t2coarse, e.qcoarse, e.t1fine, e.t2fine, e.qfine);			
 			fprintf(decoder_log, "\n");
 		}
