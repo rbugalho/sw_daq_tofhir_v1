@@ -232,7 +232,7 @@ void DAQv1Reader::processStep(int n, bool verbose, EventSink<RawHit> *sink)
 		uint64_t frameID = absoluteT1 >> 10;
 
 		e.frameID 	= frameID;
-		e.channelID	= (ELINK_MAP(elink) << 6) | ((evt >> 0) % 16);
+		e.channelID	= (link << 12) | (ELINK_MAP(elink) << 6) | ((evt >> 0) % 16);
 		e.tacID		= ((evt >> 4) % 4);
 		e.qfine		= ((evt >> 6) % 1024);
 		e.t2fine	= ((evt >> 16) % 1024);
